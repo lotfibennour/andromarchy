@@ -141,6 +141,22 @@ int shm_unlink(const char *name)
     return unlink(p);
 }
 
+// Firefox's parent process probes memfd by reopening it through /proc/self/fd (denied by SELinux) and falls back
+// to shm_open, while its content processes probe without reopening, accept memfd, then reject the parent's shm_open
+// handles as "not safe to map" and crash on every page. Failing the probe everywhere keeps them consistent.
+// ponytail: Firefox-only by name; make /proc/self/fd reopen work instead if other apps hit the same split.
+int memfd_create(const char *name, unsigned int flags)
+{
+    static int (*next)(const char *, unsigned int);
+    if (name && strncmp(name, "mozilla-ipc", 11) == 0) {
+        errno = ENOSYS;
+        return -1;
+    }
+    if (!next)
+        next = dlsym(RTLD_NEXT, "memfd_create");
+    return next(name, flags);
+}
+
 // 4. accept(): Android's app seccomp filter only allows accept4 on arm64 (bionic never uses accept), and glibc has
 //    no fallback for it, so every server dies with SIGSYS (fakeroot's faked, local web servers...). Same call.
 #include <sys/socket.h>
@@ -365,6 +381,59 @@ struct passwd *getpwuid(uid_t uid) { LOOKUP(passwd, getpwuid_r(uid, &ent, buf, s
 struct passwd *getpwnam(const char *name) { LOOKUP(passwd, getpwnam_r(name, &ent, buf, sizeof buf, &res)) }
 struct group *getgrgid(gid_t gid) { LOOKUP(group, getgrgid_r(gid, &ent, buf, sizeof buf, &res)) }
 struct group *getgrnam(const char *name) { LOOKUP(group, getgrnam_r(name, &ent, buf, sizeof buf, &res)) }
+
+// 9. DNS: glibc reads /etc/resolv.conf internally (Android's /etc: none), so every lookup went to 127.0.0.1.
+//    glibc honours nameservers an application sets in _res after res_init, and _res is per thread: before each
+//    lookup, give the calling thread the rootfs's nameservers. (Go programs read the file via go-syscalls.)
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <resolv.h>
+
+static void res_from_rootfs(void)
+{
+    static __thread int done;
+    if (done)
+        return;
+    done = 1;
+    struct __res_state *rs = __res_state();
+    if (!(rs->options & RES_INIT))
+        res_ninit(rs);
+    FILE *f = open_rootfs("/etc/resolv.conf");
+    if (!f)
+        return;
+    char line[256], ip[64];
+    int n = 0;
+    while (n < MAXNS && fgets(line, sizeof line, f))
+        if (sscanf(line, " nameserver %63s", ip) == 1 && inet_pton(AF_INET, ip, &rs->nsaddr_list[n].sin_addr) == 1) {
+            rs->nsaddr_list[n].sin_family = AF_INET;
+            rs->nsaddr_list[n].sin_port = htons(53);
+            n++;
+        } // ponytail: IPv4 nameservers only; add _u._ext.nsaddrs for IPv6 ones if ever needed
+    fclose(f);
+    if (n)
+        rs->nscount = n;
+}
+
+#define RESOLVE(ret, name, params, args)                                                                              \
+    ret name params                                                                                                     \
+    {                                                                                                                   \
+        static ret(*next) params;                                                                                       \
+        if (!next)                                                                                                      \
+            next = dlsym(RTLD_NEXT, #name);                                                                             \
+        res_from_rootfs();                                                                                              \
+        return next args;                                                                                               \
+    }
+
+RESOLVE(int, getaddrinfo, (const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res),
+        (node, service, hints, res))
+RESOLVE(struct hostent *, gethostbyname, (const char *name), (name))
+RESOLVE(struct hostent *, gethostbyname2, (const char *name, int af), (name, af))
+RESOLVE(int, gethostbyname_r,
+        (const char *name, struct hostent *ret, char *buf, size_t len, struct hostent **result, int *err),
+        (name, ret, buf, len, result, err))
+RESOLVE(int, gethostbyname2_r,
+        (const char *name, int af, struct hostent *ret, char *buf, size_t len, struct hostent **result, int *err),
+        (name, af, ret, buf, len, result, err))
 
 // Fortified callers (-D_FORTIFY_SOURCE, e.g. Firefox) call these instead.
 ssize_t __readlink_chk(const char *path, char *buf, size_t len, size_t buflen)

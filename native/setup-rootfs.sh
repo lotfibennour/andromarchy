@@ -43,6 +43,10 @@ grep -q "^[^:]*:[^:]*:$gid:" "$R/etc/group" || echo "android:x:$gid:" >> "$R/etc
 # Arch ships it empty and read-only: replace it rather than write into it.
 [ -s "$R/etc/machine-id" ] || { rm -f "$R/etc/machine-id"; tr -d '-' < /proc/sys/kernel/random/uuid > "$R/etc/machine-id"; }
 
+# DNS: Android keeps its resolvers out of reach (no readable resolv.conf, netd only for bionic). Public ones,
+# as proot-distro does. The build removes the PC's copy.
+[ -s "$R/etc/resolv.conf" ] || { rm -f "$R/etc/resolv.conf"; printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "$R/etc/resolv.conf"; }
+
 # arch-native.sh sets LOCPATH (glibc reads locales internally, outside fakechroot), and LOCPATH only reads
 # per-locale directories, not /usr/lib/locale/locale-archive: compile en_US.UTF-8 as a directory.
 [ -d "$R/usr/lib/locale/en_US.UTF-8" ] ||

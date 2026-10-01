@@ -68,5 +68,8 @@ export PATH="$OMARCHY_PATH/bin:$PATH"
 mkdir -p ~/.config/omarchy/themes
 OMARCHY_THEME_HEADLESS=1 omarchy-theme-set "Tokyo Night" || echo "theme-set reported errors (expected for missing apps)"
 
+# Firefox GPU prefs as defaults for every profile (pref() in defaults/pref, same values as firefox-user.js).
+sed 's/^user_pref(/pref(/' "$(dirname "$0")/firefox-user.js" > /usr/lib/firefox/defaults/pref/lotfix-android.js
+
 fc-cache -f >/dev/null
 echo "Omarchy installed in $OMARCHY_PATH"

@@ -51,6 +51,12 @@ else
   export MESA_LOADER_DRIVER_OVERRIDE=kgsl GALLIUM_DRIVER=freedreno
 fi
 
+# Firefox's sandbox cannot work over fakechroot: its seccomp broker checks the real (rewritten) paths against
+# /usr/share/fonts etc., denies them, and every tab crashes with "no fonts". (Under proot the kernel saw guest paths.)
+# Trade-off: web content runs without Firefox's process sandbox.
+export MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 \
+  MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_UTILITY_SANDBOX=1
+
 # android-compat.so: /proc/self/exe and /proc/*/fd links as seen from inside, shm_open without /dev/shm.
 COMPAT=$L/android-compat.so
 PRELOAD=$COMPAT:$FC
