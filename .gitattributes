@@ -1,0 +1,2 @@
+# Patches and shell scripts run on Linux/Android: keep LF everywhere.
+* text=auto eol=lf
