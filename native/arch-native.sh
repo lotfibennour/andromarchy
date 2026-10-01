@@ -20,6 +20,8 @@ export FAKECHROOT_EXCLUDE_PATH=/dev:/proc:/sys
 export LD_LIBRARY_PATH=$G:$R/usr/lib
 export PATH=/usr/local/bin:/usr/bin HOME=/root
 PRELOAD=$FC
+# A cwd outside the rootfs cannot be expressed inside it (getcwd fails): start in the fake $HOME.
+cd "$R$HOME" || exit 1
 
 if [ "${ARCH_ROOT:-0}" = 1 ]; then
   # faked prints "<key>:<pid>"; the ownership database persists across sessions in the rootfs.
