@@ -5,8 +5,8 @@
 T=/data/data/com.termux/files/usr/tmp
 H=/data/data/com.termux/files/home
 
-export ANLAND=1 ANLAND_NO_DRM_DEVICE=1 ANLAND_SOCKET=$T/anland/display_daemon.sock
-export MESA_LOADER_DRIVER_OVERRIDE=kgsl TURNIP_KMD=kgsl GALLIUM_DRIVER=freedreno FD_FORCE_KGSL=1 XWAYLAND_FORCE_KGSL_SURFACELESS=1 EGL_PLATFORM=surfaceless
+# GPU variables (KGSL, ANLAND*) are set by arch-native.sh for every program; only the compositor's own here.
+export ANLAND_SOCKET=$T/anland/display_daemon.sock EGL_PLATFORM=surfaceless
 export XDG_RUNTIME_DIR=$T/run
 export OMARCHY_PATH=/usr/share/omarchy
 unset WAYLAND_DISPLAY DISPLAY

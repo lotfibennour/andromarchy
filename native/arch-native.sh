@@ -30,7 +30,20 @@ done
 export LD_LIBRARY_PATH=${ARCH_LIBPATH_EXTRA:+$ARCH_LIBPATH_EXTRA:}$G:$LIBDIRS
 LOADER="$G/ld-linux-aarch64.so.1 --library-path $LD_LIBRARY_PATH" # same libs for the first process and its children
 export PATH=/usr/local/bin:/usr/bin HOME=/root
-PRELOAD=$FC
+
+# GPU for every program, not only those Hyprland starts: Adreno through KGSL (no DRM node on Android).
+# The ANLAND* variables are what make the KGSL Mesa expose dmabuf import/export, which Wayland GPU clients need.
+# ARCH_GPU=zink runs OpenGL on top of Vulkan/Turnip instead of Freedreno's native GL driver.
+export ANLAND=1 ANLAND_NO_DRM_DEVICE=1 TURNIP_KMD=kgsl FD_FORCE_KGSL=1 XWAYLAND_FORCE_KGSL_SURFACELESS=1
+if [ "${ARCH_GPU:-freedreno}" = zink ]; then
+  export MESA_LOADER_DRIVER_OVERRIDE=zink GALLIUM_DRIVER=zink
+else
+  export MESA_LOADER_DRIVER_OVERRIDE=kgsl GALLIUM_DRIVER=freedreno
+fi
+
+# android-compat.so: /proc/self/exe and /proc/*/fd links as seen from inside, shm_open without /dev/shm.
+COMPAT=$HOME_TERMUX/native/android-compat.so
+PRELOAD=$COMPAT:$FC
 # A cwd outside the rootfs cannot be expressed inside it (getcwd fails): start in the fake $HOME.
 cd "$R$HOME" || exit 1
 
@@ -41,12 +54,12 @@ if [ "${ARCH_ROOT:-0}" = 1 ]; then
   key_pid=$($LOADER "$R/usr/local/bin/faked" --load --save-file "$STATE" < "$STATE") || exit 1
   export FAKEROOTKEY=${key_pid%%:*}
   trap 'kill ${key_pid##*:} 2>/dev/null' EXIT
-  PRELOAD=$FR:$FC # fakeroot above fakechroot, as in the classic "fakechroot fakeroot" stack
+  PRELOAD=$COMPAT:$FR:$FC # fakeroot above fakechroot, as in the classic "fakechroot fakeroot" stack
 fi
 
 export LD_PRELOAD=$PRELOAD
 if [ "${ARCH_ROOT:-0}" = 1 ]; then
-  $LOADER --preload "${PRELOAD/:/ }" "$R/usr/bin/bash" "$@"
+  $LOADER --preload "${PRELOAD//:/ }" "$R/usr/bin/bash" "$@"
 else
-  exec $LOADER --preload "$PRELOAD" "$R/usr/bin/bash" "$@"
+  exec $LOADER --preload "${PRELOAD//:/ }" "$R/usr/bin/bash" "$@"
 fi
