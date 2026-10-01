@@ -292,6 +292,62 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
     return -1;
 }
 
+// 9. Users and groups: glibc's NSS "files" module opens /etc/passwd and /etc/group internally, so it reads Android's
+//    (missing) files: "I have no name!", ls/whoami/id without names. Look them up in the rootfs ones instead,
+//    with fopen (rewritten by fakechroot) + the standard fgetpwent_r/fgetgrent_r parsers.
+#include <grp.h>
+#include <pwd.h>
+
+#define LOOKUP_R(type, ent, getent, field_match)                                                                      \
+    FILE *f = fopen(ent, "re");                                                                                         \
+    *result = NULL;                                                                                                     \
+    if (!f)                                                                                                             \
+        return errno;                                                                                                   \
+    int err;                                                                                                            \
+    struct type *r;                                                                                                     \
+    while ((err = getent(f, out, buf, len, &r)) == 0)                                                                   \
+        if (field_match) {                                                                                              \
+            *result = r;                                                                                                \
+            break;                                                                                                      \
+        }                                                                                                               \
+    fclose(f);                                                                                                          \
+    return err == ENOENT ? 0 : err;
+
+int getpwuid_r(uid_t uid, struct passwd *out, char *buf, size_t len, struct passwd **result)
+{
+    LOOKUP_R(passwd, "/etc/passwd", fgetpwent_r, r->pw_uid == uid)
+}
+
+int getpwnam_r(const char *name, struct passwd *out, char *buf, size_t len, struct passwd **result)
+{
+    LOOKUP_R(passwd, "/etc/passwd", fgetpwent_r, strcmp(r->pw_name, name) == 0)
+}
+
+int getgrgid_r(gid_t gid, struct group *out, char *buf, size_t len, struct group **result)
+{
+    LOOKUP_R(group, "/etc/group", fgetgrent_r, r->gr_gid == gid)
+}
+
+int getgrnam_r(const char *name, struct group *out, char *buf, size_t len, struct group **result)
+{
+    LOOKUP_R(group, "/etc/group", fgetgrent_r, strcmp(r->gr_name, name) == 0)
+}
+
+// Non-reentrant versions on top of the _r ones (static storage, as in glibc).
+#define LOOKUP(type, call)                                                                                              \
+    static struct type ent;                                                                                             \
+    static char buf[16384];                                                                                             \
+    struct type *res = NULL;                                                                                            \
+    int err = call;                                                                                                     \
+    if (err)                                                                                                            \
+        errno = err;                                                                                                    \
+    return res;
+
+struct passwd *getpwuid(uid_t uid) { LOOKUP(passwd, getpwuid_r(uid, &ent, buf, sizeof buf, &res)) }
+struct passwd *getpwnam(const char *name) { LOOKUP(passwd, getpwnam_r(name, &ent, buf, sizeof buf, &res)) }
+struct group *getgrgid(gid_t gid) { LOOKUP(group, getgrgid_r(gid, &ent, buf, sizeof buf, &res)) }
+struct group *getgrnam(const char *name) { LOOKUP(group, getgrnam_r(name, &ent, buf, sizeof buf, &res)) }
+
 // Fortified callers (-D_FORTIFY_SOURCE, e.g. Firefox) call these instead.
 ssize_t __readlink_chk(const char *path, char *buf, size_t len, size_t buflen)
 {
