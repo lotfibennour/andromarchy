@@ -87,7 +87,7 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 | # | Étape | Critère de réussite |
 |---|---|---|
 | 1.1 | Extraire la liste de paquets et les dotfiles d'Omarchy, et retirer boot, LUKS, Limine, snapper, iwd, bluez et brightnessctl. | Liste de paquets + `dotfiles/` versionnés. |
-| 1.2 | Construire la rootfs aarch64 sur PC (Docker + qemu-user). | `rootfs.tar.zst` reproductible en une commande. |
+| ✅ 1.2 | **Validée par l'utilisateur (2026-10-01)** : [build/build-hyprland.sh](build/build-hyprland.sh) compile aquamarine + Hyprland nativement sur la tablette (~1 h, contre des heures sous qemu) ; [build/build-rootfs.sh](build/build-rootfs.sh) assemble sur PC (WSL + qemu-user, chroot) Arch Linux ARM, Mesa KGSL, fakeroot TCP, Omarchy et le runtime sans proot (`/opt/lotfix`) en `lotfix-rootfs.tar.zst` (1 Go, 3,5 Go décompressé). Sur la tablette : décompression + `setup-rootfs.sh` (passwd, machine-id, resolv.conf). Corrigés en route : Firefox (memfd/shm entre processus, bac à sable incompatible avec fakechroot), DNS sans proot (glibc lit `/etc/resolv.conf` en interne : serveurs posés dans `_res` par thread). | `rootfs.tar.zst` reproductible en une commande. |
 | 1.3 | Retirer de Waybar les modules matériels. | Waybar démarre sans erreur dans les logs. |
 
 ## Phase 2 : le shim sans proot
