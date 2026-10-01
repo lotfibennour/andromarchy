@@ -11,6 +11,16 @@ Appareil cible : POCO Pad 2 Pro (Android 16, Snapdragon/Adreno).
 - **Pas de gestion du matériel** : réseau, Bluetooth, luminosité (limite n°8 abandonnée).
 - **Abandonnés :** seccomp USER_NOTIF, unshare/namespaces, vrai systemd.
 
+## Spécificités HyperOS (Xiaomi), appareil cible
+
+- **Gestion d'énergie agressive** : tue les apps en arrière-plan. Dev : *wake lock* Termux. APK : foreground service + batterie « Aucune restriction ».
+- **Autorisation « Démarrage automatique »** propre à Xiaomi : à demander dans l'onboarding de l'APK.
+- **Raccourcis clavier système** : interceptent Super et des combinaisons avant l'app (vu : Super n'arrive jamais). Service d'accessibilité (4.6) + désactiver les raccourcis HyperOS concernés.
+- **Redémarrage de l'activité** au branchement d'un clavier ou à la rotation : déconnexions Anland, gérées par la reconnexion du backend.
+- **« Paramètres restreints »** pour les APK hors store : bloque l'activation de l'accessibilité tant que l'utilisateur ne l'autorise pas.
+- **Option « Optimisation HyperOS/MIUI »** (options développeur) : à vérifier en cas de comportement de permission inexpliqué.
+- **Liens système** `/etc -> /system/etc`, `/bin -> /system/bin` : tout calcul de chemin côté hôte doit éviter de les suivre (`realpath -s`).
+
 ## Contraintes non négociables
 
 - Projet entier sous **GPL-3.0**, code source public (à cause d'Anland).
@@ -86,7 +96,7 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 |---|---|---|
 | 2.0 | **Mesures de référence (2026-10-01)**, [probes/bench.sh](probes/bench.sh), sous proot : `ls -lR /usr/share/icons` 12,4 s ; 200 lancements 2,27 s ; `pacman -Q` 0,32 s ; `gcc` 0,48 s ; `python` 0,20 s. | — |
 | 2.1 (partiel) | **Premier lancement sans proot (2026-10-01)** : l'Arch glibc 2.43 est tuée par seccomp Android (`SIGSYS` sur `set_robust_list`). Solution : la **glibc 2.44 patchée de Termux** (`pkg install glibc-repo glibc`, `$PREFIX/glibc`) comme chargeur, puis les bibliothèques d'Arch : `$PREFIX/glibc/lib/ld-linux-aarch64.so.1 --library-path $PREFIX/glibc/lib:$ROOTFS/usr/lib <binaire>`, **sans `LD_PRELOAD`** (libtermux-exec est en Bionic). `bash` d'Arch tourne. Chemins réels, sans réécriture : `ls -lR` **0,19 s (64× plus rapide)**, 200 lancements **1,34 s**. Reste : réécriture d'`execve` et des shebangs. | `bash` de la rootfs exécute un script `#!/usr/bin/env python3`. |
-| 2.2 | Réécriture des chemins (fakechroot porté) + faux `chroot()`. | `cat /etc/os-release` affiche Arch Linux ARM. |
+| 2.1 + 2.2 (en cours) | **fakechroot 2.20.1 d'Arch** (pas de shim maison) + chargeur glibc Termux : [native/arch-native.sh](native/arch-native.sh). Validé sans proot : `/usr/bin` = 1549 binaires d'Arch, `python`, `/usr/bin/env python3`, script `#!/bin/sh`. Pièges : (1) **`FAKECHROOT_ELFLOADER_OPT_ARGV0` interdit**, sinon fakechroot oublie le chemin du script lors d'un exec `#!` (sh démarre sans script, sort en 0) ; contrepartie : `sys.executable` montre le chemin Android réel ; (2) **liens symboliques absolus** : le noyau les suit hors de la rootfs, d'où [native/relativize-symlinks.sh](native/relativize-symlinks.sh) (avec `realpath -s`, sinon le `/etc -> /system/etc` d'Android fausse le calcul). Une première passe boguée a laissé un `../` en trop sous `/etc` et `/bin` : [native/repair-etc-bin-links.sh](native/repair-etc-bin-links.sh), exécuté (44 liens réparés). **✅ Validé (2026-10-01) : `head -2 /etc/os-release` → `NAME="Arch Linux ARM"`, sans proot.** | `cat /etc/os-release` affiche Arch Linux ARM. |
 | 2.3 | Faux root (fakeroot). | `pacman -Syu` et `pacman -S htop` réussissent, scriptlets compris. |
 | 2.4 | Loader SIGSYS pour les binaires statiques (handler freestanding, `rt_sigaction`/`rt_sigprocmask` de SIGSYS interceptés, `execve` → loader). | Un binaire Go statique lit le `/etc/passwd` virtuel et lance `/bin/sh`. |
 | 2.5 | Faux `systemctl` + runit. | Les services utilisateur d'Omarchy démarrent sans erreur. |
