@@ -14,9 +14,13 @@
 
 extern char *program_invocation_name; // argv[0]
 
+// Read once by the constructor: bash replaces getenv() with its own, which early in "bash --posix -i" startup
+// (kitty's shell integration) does not see the environment yet.
+static const char *rootfs_base;
+
 static const char *strip_base(char *path)
 {
-    const char *base = getenv("FAKECHROOT_BASE");
+    const char *base = rootfs_base;
     size_t bl = base ? strlen(base) : 0;
     if (bl && strncmp(path, base, bl) == 0 && path[bl] == '/')
         memmove(path, path + bl, strlen(path + bl) + 1);
@@ -44,6 +48,7 @@ void go_syscalls_init(const char *program, const char *self_guest);
 
 __attribute__((constructor)) static void android_compat_init(void)
 {
+    rootfs_base = getenv("FAKECHROOT_BASE");
     if (program_invocation_name && program_invocation_name[0] == '/')
         go_syscalls_init(program_invocation_name, main_program());
 }
@@ -298,8 +303,21 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
 #include <grp.h>
 #include <pwd.h>
 
+// Raw openat on the host path: fakechroot finds no FAKECHROOT_BASE through bash's getenv early in "bash --posix -i"
+// (it then opened Android's own /etc/passwd), and it would rewrite an already-prefixed path a second time.
+static FILE *open_rootfs(const char *path)
+{
+    char full[4096];
+    snprintf(full, sizeof full, "%s%s", rootfs_base ? rootfs_base : "", path);
+    int fd = syscall(SYS_openat, AT_FDCWD, full, O_RDONLY | O_CLOEXEC);
+    FILE *f = fd < 0 ? NULL : fdopen(fd, "r");
+    if (fd >= 0 && !f)
+        close(fd);
+    return f;
+}
+
 #define LOOKUP_R(type, ent, getent, field_match)                                                                      \
-    FILE *f = fopen(ent, "re");                                                                                         \
+    FILE *f = open_rootfs(ent);                                                                                         \
     *result = NULL;                                                                                                     \
     if (!f)                                                                                                             \
         return errno;                                                                                                   \
