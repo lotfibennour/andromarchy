@@ -49,8 +49,12 @@ void go_syscalls_init(const char *program, const char *self_guest);
 __attribute__((constructor)) static void android_compat_init(void)
 {
     rootfs_base = getenv("FAKECHROOT_BASE");
-    if (program_invocation_name && program_invocation_name[0] == '/')
-        go_syscalls_init(program_invocation_name, main_program());
+    if (program_invocation_name && program_invocation_name[0] == '/') {
+        go_syscalls_init(program_invocation_name, main_program()); // both resolve the host path first
+        // fakechroot's loader exec passes the HOST path as argv[0]. Programs that locate their files from it
+        // (gcc: cc1, specs...) then build host paths that fakechroot prefixes a second time. Show the guest path.
+        strip_base(program_invocation_name); // in place: argv[0] is the same string
+    }
 }
 
 static int is_self_exe(const char *path)
@@ -311,6 +315,162 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
     }
     errno = saw_eacces ? EACCES : ENOENT;
     return -1;
+}
+
+// 8b. posix_spawn(p): glibc's clones and calls execve itself, on Android's filesystem and without the loader
+//     (gcc: "cannot execute 'cc1': posix_spawnp: No such file or directory"). Same semantics with fork + the
+//     execve/execvpe above, exec errors reported back through a close-on-exec pipe like glibc does.
+#include <signal.h>
+#include <spawn.h>
+#include <sys/wait.h>
+
+// glibc's private layout of posix_spawn_file_actions_t entries (posix/spawn_int.h, stable since 2.29).
+// ponytail: tied to glibc internals; recheck spawn_int.h if a glibc upgrade breaks spawned redirections.
+struct spawn_action {
+    enum { do_close, do_dup2, do_open, do_chdir, do_fchdir, do_closefrom, do_tcsetpgrp } tag;
+    union {
+        struct { int fd; } close_action;
+        struct { int fd, newfd; } dup2_action;
+        struct { int fd; char *path; int oflag; mode_t mode; } open_action;
+        struct { char *path; } chdir_action;
+        struct { int fd; } fchdir_action;
+        struct { int from; } closefrom_action;
+        struct { int fd; } setpgrp_action;
+    } action;
+};
+struct spawn_file_actions {
+    int allocated, used;
+    struct spawn_action *actions;
+};
+
+static int apply_file_actions(const posix_spawn_file_actions_t *fa)
+{
+    const struct spawn_file_actions *f = (const void *)fa;
+    for (int i = 0; f && i < f->used; i++) {
+        const struct spawn_action *a = &f->actions[i];
+        switch (a->tag) {
+        case do_close:
+            close(a->action.close_action.fd); // EBADF is not an error for posix_spawn
+            break;
+        case do_dup2:
+            if (a->action.dup2_action.fd == a->action.dup2_action.newfd) {
+                int fl = fcntl(a->action.dup2_action.fd, F_GETFD); // same fd: just keep it across exec
+                if (fl < 0 || fcntl(a->action.dup2_action.fd, F_SETFD, fl & ~FD_CLOEXEC) < 0)
+                    return -1;
+            } else if (dup2(a->action.dup2_action.fd, a->action.dup2_action.newfd) < 0)
+                return -1;
+            break;
+        case do_open: {
+            int fd = open(a->action.open_action.path, a->action.open_action.oflag, a->action.open_action.mode);
+            if (fd < 0)
+                return -1;
+            if (fd != a->action.open_action.fd) {
+                if (dup2(fd, a->action.open_action.fd) < 0)
+                    return -1;
+                close(fd);
+            }
+            break;
+        }
+        case do_chdir:
+            if (chdir(a->action.chdir_action.path) < 0)
+                return -1;
+            break;
+        case do_fchdir:
+            if (fchdir(a->action.fchdir_action.fd) < 0)
+                return -1;
+            break;
+        case do_closefrom:
+            closefrom(a->action.closefrom_action.from);
+            break;
+        case do_tcsetpgrp:
+            if (tcsetpgrp(a->action.setpgrp_action.fd, getpgrp()) < 0)
+                return -1;
+            break;
+        }
+    }
+    return 0;
+}
+
+static int apply_attrs(const posix_spawnattr_t *at)
+{
+    short fl = 0;
+    if (!at || posix_spawnattr_getflags(at, &fl))
+        return 0;
+    if (fl & POSIX_SPAWN_SETSID && setsid() < 0)
+        return -1;
+    if (fl & POSIX_SPAWN_SETPGROUP) {
+        pid_t pg = 0;
+        posix_spawnattr_getpgroup(at, &pg);
+        if (setpgid(0, pg) < 0)
+            return -1;
+    }
+    if (fl & POSIX_SPAWN_RESETIDS && (setgid(getgid()) < 0 || setuid(getuid()) < 0))
+        return -1;
+    if (fl & POSIX_SPAWN_SETSIGDEF) {
+        sigset_t def;
+        posix_spawnattr_getsigdefault(at, &def);
+        for (int s = 1; s < NSIG; s++)
+            if (sigismember(&def, s) == 1)
+                signal(s, SIG_DFL);
+    }
+    if (fl & POSIX_SPAWN_SETSIGMASK) {
+        sigset_t mask;
+        posix_spawnattr_getsigmask(at, &mask);
+        sigprocmask(SIG_SETMASK, &mask, NULL);
+    } // ponytail: SETSCHEDPARAM/SETSCHEDULER ignored; add sched_setscheduler if something needs them
+    return 0;
+}
+
+static int spawn(pid_t *pid, const char *file, const posix_spawn_file_actions_t *fa, const posix_spawnattr_t *at,
+                 char *const argv[], char *const envp[], int search)
+{
+    int p[2];
+    if (pipe2(p, O_CLOEXEC) < 0)
+        return errno;
+    pid_t c = fork();
+    if (c < 0) {
+        int e = errno;
+        close(p[0]);
+        close(p[1]);
+        return e;
+    }
+    if (c == 0) {
+        close(p[0]);
+        if (apply_attrs(at) == 0 && apply_file_actions(fa) == 0) {
+            if (search)
+                execvpe(file, argv, envp ? envp : environ);
+            else
+                execve(file, argv, envp ? envp : environ);
+        }
+        int e = errno;
+        (void)!write(p[1], &e, sizeof e);
+        _exit(127);
+    }
+    close(p[1]);
+    int e = 0;
+    ssize_t n;
+    while ((n = read(p[0], &e, sizeof e)) < 0 && errno == EINTR)
+        ;
+    close(p[0]);
+    if (n == sizeof e) { // the child failed before exec: reap it, report its errno
+        waitpid(c, NULL, 0);
+        return e;
+    }
+    if (pid)
+        *pid = c;
+    return 0;
+}
+
+int posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *fa, const posix_spawnattr_t *at,
+                char *const argv[], char *const envp[])
+{
+    return spawn(pid, path, fa, at, argv, envp, 0);
+}
+
+int posix_spawnp(pid_t *pid, const char *file, const posix_spawn_file_actions_t *fa, const posix_spawnattr_t *at,
+                 char *const argv[], char *const envp[])
+{
+    return spawn(pid, file, fa, at, argv, envp, 1);
 }
 
 // 9. Users and groups: glibc's NSS "files" module opens /etc/passwd and /etc/group internally, so it reads Android's
