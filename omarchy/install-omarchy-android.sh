@@ -37,6 +37,21 @@ while [ $# -gt 0 ]; do
 done
 exec "$@"
 EOF
+# No systemd user session: the app launcher runs "uwsm-app -- gtk-launch x.desktop" (uwsm puts apps in a scope).
+cat > /usr/local/bin/uwsm-app <<'EOF'
+#!/bin/sh
+# Android: no systemd, so no scope. Drop uwsm-app options and run the command as-is.
+while [ $# -gt 0 ]; do
+  case $1 in
+    -s|-a|-u|-d|-t|-S) shift 2 ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+exec "$@"
+EOF
+chmod 755 /usr/local/bin/uwsm-app
 chmod +x /usr/local/bin/systemd-cat
 
 # User config, same layout as Omarchy's install (config/ -> ~/.config).
