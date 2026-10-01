@@ -20,3 +20,16 @@ while IFS= read -r -d '' link; do
   n=$((n + 1))
 done < <(find "$R" -xdev -type l -lname '/*' -print0)
 echo "relativized $n symlinks"
+
+# The reverse case: relative links into /proc, /dev or /sys (e.g. /etc/mtab -> ../proc/self/mounts) point at the
+# rootfs's own empty dirs, which proot used to fill. Make them absolute so the kernel reaches Android's real ones.
+a=0
+while IFS= read -r -d '' link; do
+  target=$(readlink "$link")
+  case $target in /*) continue ;; esac
+  guest=$(realpath -m -s "$(dirname "/${link#"$R"/}")/$target")
+  case $guest in
+    /dev/* | /proc/* | /sys/*) ln -sfn "$guest" "$link"; a=$((a + 1)) ;;
+  esac
+done < <(find "$R" -xdev -type l -print0 2>/dev/null)
+echo "made $a links into /dev, /proc, /sys absolute"
