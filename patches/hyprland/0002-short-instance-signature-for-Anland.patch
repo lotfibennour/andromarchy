@@ -1,0 +1,16 @@
+diff --git a/src/Compositor.cpp b/src/Compositor.cpp
+index 1d2d8b9..24412de 100644
+--- a/src/Compositor.cpp
++++ b/src/Compositor.cpp
+@@ -203,7 +203,10 @@ CCompositor::CCompositor(bool onlyConfig) : m_onlyConfigVerification(onlyConfig)
+     std::mt19937                    engine(dev());
+     std::uniform_int_distribution<> distribution(0, INT32_MAX);
+ 
+-    m_instanceSignature = std::format("{}_{}_{}", GIT_COMMIT_HASH, std::time(nullptr), distribution(engine));
++    // Anland (Android): $XDG_RUNTIME_DIR lives under /data/data/com.termux/..., and the full 40-char commit hash pushes
++    // $XDG_RUNTIME_DIR/hypr/<signature>/.socket2.sock past the 108-byte sun_path limit, so hyprctl cannot connect. Shorten it.
++    const std::string commit = getenv("ANLAND") ? std::string(GIT_COMMIT_HASH).substr(0, 7) : std::string(GIT_COMMIT_HASH);
++    m_instanceSignature      = std::format("{}_{}_{}", commit, std::time(nullptr), distribution(engine));
+ 
+     setenv("HYPRLAND_INSTANCE_SIGNATURE", m_instanceSignature.c_str(), true);
+ 

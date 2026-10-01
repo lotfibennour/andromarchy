@@ -239,10 +239,10 @@ index edc4aff..7d9a985 100644
      if (age)
 diff --git a/src/backend/Anland.cpp b/src/backend/Anland.cpp
 new file mode 100644
-index 0000000..6251d77
+index 0000000..7a90b94
 --- /dev/null
 +++ b/src/backend/Anland.cpp
-@@ -0,0 +1,579 @@
+@@ -0,0 +1,587 @@
 +#include <aquamarine/backend/Anland.hpp>
 +#include <cstdio>
 +#include <cstdlib>
@@ -547,8 +547,6 @@ index 0000000..6251d77
 +        return false;
 +    }
 +
-+    if (output && buffers.at(0)->size != size)
-+        backend->log(AQ_LOG_WARNING, std::format("anland: buffer size changed {} -> {} (rotation not handled yet)", size, buffers.at(0)->size));
 +    size = buffers.at(0)->size;
 +    return true;
 +}
@@ -706,9 +704,19 @@ index 0000000..6251d77
 +        return;
 +    }
 +
++    const auto oldSize = size;
 +    if (!importBuffers()) {
 +        armReconnect(1000);
 +        return;
++    }
++
++    // The Android side sizes its buffers to the screen orientation it had when it (re)connected:
++    // after a rotation the output mode follows, and the compositor reconfigures (events.state, like the Wayland backend).
++    if (output && size != oldSize) {
++        fprintf(stderr, "anland: screen is now %.0fx%.0f\n", size.x, size.y);
++        output->modes.clear();
++        output->modes.emplace_back(SP<SOutputMode>(new SOutputMode(size, (unsigned int)refreshmHz, true)));
++        output->events.state.emit(IOutput::SStateEvent{.size = size});
 +    }
 +
 +    backend->log(AQ_LOG_DEBUG, std::format("anland: consumer back, {} buffers of {}", buffers.size(), size));
