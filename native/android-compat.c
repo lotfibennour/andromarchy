@@ -127,6 +127,123 @@ int shm_unlink(const char *name)
     return unlink(p);
 }
 
+// 4. accept(): Android's app seccomp filter only allows accept4 on arm64 (bionic never uses accept), and glibc has
+//    no fallback for it, so every server dies with SIGSYS (fakeroot's faked, local web servers...). Same call.
+#include <sys/socket.h>
+
+int accept(int fd, struct sockaddr *addr, socklen_t *len)
+{
+    return accept4(fd, addr, len, 0);
+}
+
+// 5. syscall(NR, ...): code that issues raw syscalls through glibc's generic wrapper (Mesa uses kcmp to compare
+//    fds) is out of reach of the binary patch in patch-glibc-syscalls.py. For syscalls Android's app filter kills,
+//    answer ENOSYS like an old kernel would; callers already handle that.
+#include <stdarg.h>
+#include <sys/syscall.h>
+
+static int android_blocked(long nr)
+{
+    switch (nr) {
+    case SYS_kcmp:
+    case SYS_set_robust_list:
+    case SYS_rseq:
+    case SYS_faccessat2:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+long syscall(long nr, ...)
+{
+    static long (*next)(long, ...);
+    va_list ap;
+    long a[6];
+    va_start(ap, nr);
+    for (int i = 0; i < 6; i++)
+        a[i] = va_arg(ap, long);
+    va_end(ap);
+    if (android_blocked(nr)) {
+        errno = ENOSYS;
+        return -1;
+    }
+    if (!next)
+        next = dlsym(RTLD_NEXT, "syscall");
+    return next(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+}
+
+// 6. tcgetattr/tcsetattr: recent glibc uses the TCGETS2/TCSETS2 ioctls, which Android's SELinux ioctl allowlist
+//    refuses on ptys (EACCES): foot, shells, editors fail. Use the classic TCGETS/TCSETS + the kernel's struct.
+#include <sys/ioctl.h>
+#include <termios.h>
+
+struct kernel_termios { // asm-generic struct termios (no speed fields)
+    tcflag_t c_iflag, c_oflag, c_cflag, c_lflag;
+    cc_t     c_line;
+    cc_t     c_cc[19];
+};
+
+int tcgetattr(int fd, struct termios *t)
+{
+    struct kernel_termios k;
+    if (ioctl(fd, TCGETS, &k) < 0)
+        return -1;
+    memset(t, 0, sizeof *t);
+    t->c_iflag = k.c_iflag;
+    t->c_oflag = k.c_oflag;
+    t->c_cflag = k.c_cflag;
+    t->c_lflag = k.c_lflag;
+    t->c_line  = k.c_line;
+    memcpy(t->c_cc, k.c_cc, sizeof k.c_cc < sizeof t->c_cc ? sizeof k.c_cc : sizeof t->c_cc);
+    cfsetspeed(t, k.c_cflag & CBAUD); // let glibc fill its speed fields from the encoded baud bits
+    t->c_cflag = k.c_cflag;
+    return 0;
+}
+
+int tcsetattr(int fd, int act, const struct termios *t)
+{
+    static const unsigned long cmd[] = {TCSETS, TCSETSW, TCSETSF}; // TCSANOW, TCSADRAIN, TCSAFLUSH
+    if (act < 0 || act > 2) {
+        errno = EINVAL;
+        return -1;
+    }
+    struct kernel_termios k = {t->c_iflag, t->c_oflag, t->c_cflag, t->c_lflag, t->c_line, {0}};
+    memcpy(k.c_cc, t->c_cc, sizeof k.c_cc);
+    return ioctl(fd, cmd[act], &k);
+}
+
+// glibc's isatty/ttyname call tcgetattr INTERNALLY (TCGETS2 again), so they say "not a tty" on a real pty.
+int isatty(int fd)
+{
+    struct kernel_termios k;
+    return ioctl(fd, TCGETS, &k) == 0;
+}
+
+int ttyname_r(int fd, char *buf, size_t len)
+{
+    if (!isatty(fd))
+        return errno == EBADF ? EBADF : ENOTTY;
+    char link[64];
+    snprintf(link, sizeof link, "/proc/self/fd/%d", fd);
+    ssize_t n = readlink(link, buf, len - 1);
+    if (n < 0)
+        return errno;
+    buf[n] = 0;
+    return 0;
+}
+
+char *ttyname(int fd)
+{
+    static char name[256];
+    int err = ttyname_r(fd, name, sizeof name);
+    if (err) {
+        errno = err;
+        return NULL;
+    }
+    return name;
+}
+
 // Fortified callers (-D_FORTIFY_SOURCE, e.g. Firefox) call these instead.
 ssize_t __readlink_chk(const char *path, char *buf, size_t len, size_t buflen)
 {

@@ -30,6 +30,9 @@ done
 export LD_LIBRARY_PATH=${ARCH_LIBPATH_EXTRA:+$ARCH_LIBPATH_EXTRA:}$G:$LIBDIRS
 LOADER="$G/ld-linux-aarch64.so.1 --library-path $LD_LIBRARY_PATH" # same libs for the first process and its children
 export PATH=/usr/local/bin:/usr/bin HOME=/root
+# Termux's own values would leak in (terminals spawn $SHELL = Termux's bash, a Bionic binary).
+export SHELL=/usr/bin/bash TMPDIR=/tmp
+unset PREFIX ANDROID_ROOT_TERMUX
 
 # GPU for every program, not only those Hyprland starts: Adreno through KGSL (no DRM node on Android).
 # The ANLAND* variables are what make the KGSL Mesa expose dmabuf import/export, which Wayland GPU clients need.
@@ -51,7 +54,12 @@ if [ "${ARCH_ROOT:-0}" = 1 ]; then
   # faked prints "<key>:<pid>"; the ownership database persists across sessions in the rootfs.
   STATE=$R/var/lib/fakeroot.state
   : >> "$STATE" # shell builtin: PATH already points at the rootfs here
-  key_pid=$($LOADER "$R/usr/local/bin/faked" --load --save-file "$STATE" < "$STATE") || exit 1
+  # Its stdout must be a file, not a $(...) pipe: the pipe closes once the key is read and any later write by the
+  # daemon would kill it with SIGPIPE ("libfakeroot: read: Connection reset by peer").
+  KEYF=$R/tmp/.faked.$$
+  # faked is a TCP server: it needs android-compat's accept() -> accept4() (plain accept is killed by seccomp).
+  LD_PRELOAD=$COMPAT $LOADER "$R/usr/local/bin/faked" --load --save-file "$STATE" < "$STATE" > "$KEYF" 2> "$KEYF.err" || { echo "faked: $(< "$KEYF.err")" >&2; exit 1; }
+  key_pid=$(< "$KEYF")
   export FAKEROOTKEY=${key_pid%%:*}
   trap 'kill ${key_pid##*:} 2>/dev/null' EXIT
   PRELOAD=$COMPAT:$FR:$FC # fakeroot above fakechroot, as in the classic "fakechroot fakeroot" stack
