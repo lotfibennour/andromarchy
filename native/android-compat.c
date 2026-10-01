@@ -158,6 +158,8 @@ static int android_blocked(long nr)
     case SYS_set_robust_list:
     case SYS_rseq:
     case SYS_faccessat2:
+    case SYS_setfsuid:
+    case SYS_setfsgid:
         return 1;
     default:
         return 0;
@@ -251,6 +253,43 @@ char *ttyname(int fd)
         return NULL;
     }
     return name;
+}
+
+// 8. execvpe: fakechroot 2.20.1 does not wrap it, so glibc's version issues the execve syscall itself with the guest
+//    path, on Android's filesystem (foot: "bash: failed to execute", or Android's /bin/sh). Search PATH here and go
+//    through execve, which fakechroot wraps (loader + #! handling).
+extern char **environ;
+
+int execvpe(const char *file, char *const argv[], char *const envp[])
+{
+    if (!file || !*file) {
+        errno = ENOENT;
+        return -1;
+    }
+    if (strchr(file, '/'))
+        return execve(file, argv, envp);
+    const char *path = getenv("PATH");
+    if (!path)
+        path = "/usr/local/bin:/usr/bin";
+    char buf[4096];
+    int saw_eacces = 0;
+    for (const char *p = path; *p;) {
+        const char *e = strchr(p, ':');
+        size_t n = e ? (size_t)(e - p) : strlen(p);
+        if (n && n + 1 + strlen(file) < sizeof buf) {
+            memcpy(buf, p, n);
+            buf[n] = '/';
+            strcpy(buf + n + 1, file);
+            execve(buf, argv, envp); // returns only on failure
+            if (errno == EACCES)
+                saw_eacces = 1;
+        }
+        if (!e)
+            break;
+        p = e + 1;
+    }
+    errno = saw_eacces ? EACCES : ENOENT;
+    return -1;
 }
 
 // Fortified callers (-D_FORTIFY_SOURCE, e.g. Firefox) call these instead.

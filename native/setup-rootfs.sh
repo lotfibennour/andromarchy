@@ -39,6 +39,11 @@ else
 fi
 grep -q "^[^:]*:[^:]*:$gid:" "$R/etc/group" || echo "android:x:$gid:" >> "$R/etc/group"
 
+# arch-native.sh sets LOCPATH (glibc reads locales internally, outside fakechroot), and LOCPATH only reads
+# per-locale directories, not /usr/lib/locale/locale-archive: compile en_US.UTF-8 as a directory.
+[ -d "$R/usr/lib/locale/en_US.UTF-8" ] ||
+  "$HERE/arch-native.sh" -c 'localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8' || true
+
 # Absolute RUNPATH/RPATH entries (e.g. libproxy -> /usr/lib/libproxy) are resolved by the loader on Android's
 # real filesystem, not through fakechroot. Collect them once; arch-native.sh adds ld.so.conf.d dirs to its path.
 find "$R/usr/lib" "$R/usr/bin" -xdev -type f \( -name '*.so*' -o -perm -u+x \) -size +1k 2>/dev/null |
