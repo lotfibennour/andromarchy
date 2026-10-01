@@ -12,5 +12,11 @@ export OMARCHY_PATH=/usr/share/omarchy
 unset WAYLAND_DISPLAY DISPLAY
 
 export ARCH_EXCLUDE_EXTRA=$T:$H
-export ARCH_LIBPATH_EXTRA=$H/aquamarine/build
-exec "$H/native/arch-native.sh" -c "export PATH=/usr/share/omarchy/bin:\$PATH; exec $H/Hyprland/build/Hyprland"
+R=${ARCH_ROOTFS:-/data/data/com.termux/files/usr/var/lib/proot-distro/containers/archlinux/rootfs}
+if [ -e "$R/usr/share/lotfix-hyprland-version" ]; then
+  HYPR=/usr/bin/Hyprland # built rootfs: our Hyprland and aquamarine are installed in it
+else
+  export ARCH_LIBPATH_EXTRA=$H/aquamarine/build
+  HYPR=$H/Hyprland/build/Hyprland
+fi
+exec "$H/native/arch-native.sh" -c "export PATH=/usr/share/omarchy/bin:\$PATH; exec $HYPR"

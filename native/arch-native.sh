@@ -10,8 +10,12 @@ unset LD_PRELOAD # Termux's libtermux-exec.so is a Bionic library, glibc cannot 
 R=${ARCH_ROOTFS:-/data/data/com.termux/files/usr/var/lib/proot-distro/containers/archlinux/rootfs}
 # ld.so + libc.so.6 from Arch with set_robust_list/rseq patched to ENOSYS. (Termux's patched glibc 2.44 works for
 # most programs, but Qt's QML JS engine aborts on it with heap corruption, so the rootfs's own glibc is used.)
-G=/data/data/com.termux/files/home/native/arch-glibc
 HOME_TERMUX=/data/data/com.termux/files/home
+# A rootfs from build/build-rootfs.sh carries its own runtime in /opt/lotfix (always matching its glibc);
+# older hand-built ones use the copies in ~/native.
+L=$HOME_TERMUX/native
+[ -d "$R/opt/lotfix" ] && L=$R/opt/lotfix
+G=$L/arch-glibc
 FC=$R/usr/lib/libfakeroot/fakechroot/libfakechroot.so
 FR=$R/usr/local/lib/libfakeroot.so
 
@@ -48,7 +52,7 @@ else
 fi
 
 # android-compat.so: /proc/self/exe and /proc/*/fd links as seen from inside, shm_open without /dev/shm.
-COMPAT=$HOME_TERMUX/native/android-compat.so
+COMPAT=$L/android-compat.so
 PRELOAD=$COMPAT:$FC
 # A cwd outside the rootfs cannot be expressed inside it (getcwd fails): start in the fake $HOME.
 cd "$R$HOME" || exit 1
