@@ -20,6 +20,8 @@ rm -rf "$OMARCHY_PATH"
 cp -a "$SRC" "$OMARCHY_PATH"
 # A clone made on Windows has CRLF line endings, which break every omarchy-* script.
 grep -rlIZ $'\r' "$OMARCHY_PATH" | xargs -0 -r sed -i 's/\r$//'
+# ttfx comes from the x86-only Omarchy repo; without it the screensaver loops on "command not found".
+sed -i '/^trap exit_screensaver/a command -v ttfx >/dev/null || exit_screensaver' "$OMARCHY_PATH/bin/omarchy-screensaver"
 
 # No journald on Android: omarchy-launch-shell runs the shell through systemd-cat.
 cat > /usr/local/bin/systemd-cat <<'EOF'
