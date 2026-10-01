@@ -19,7 +19,7 @@ pacman -S --noconfirm --needed \
 rm -rf "$OMARCHY_PATH"
 cp -a "$SRC" "$OMARCHY_PATH"
 # A clone made on Windows has CRLF line endings, which break every omarchy-* script.
-grep -rlIZ $'\r' "$OMARCHY_PATH" | xargs -0 -r sed -i 's/\r$//'
+grep -rlIZ $'\r' "$OMARCHY_PATH" | xargs -0 -r sed -i 's/\r$//' || true # none in a Linux clone: grep exits 1
 # ttfx comes from the x86-only Omarchy repo; without it the screensaver loops on "command not found".
 sed -i '/^trap exit_screensaver/a command -v ttfx >/dev/null || exit_screensaver' "$OMARCHY_PATH/bin/omarchy-screensaver"
 
