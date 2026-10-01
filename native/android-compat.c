@@ -4,7 +4,7 @@
 //     Quickshell's relaunch...) look in the glibc dir. Answer with the real program, from argv[0].
 //  2. every /proc/*/{fd/N,cwd,exe} link: the kernel answers HOST paths (/data/data/.../rootfs/usr/...). A real
 //     chroot shows /usr/...; with the prefix, fakechroot prepends it again when the path is reused.
-// Build (rootfs): gcc -O2 -shared -fPIC -o android-compat.so android-compat.c -ldl
+// Build (rootfs): gcc -O2 -shared -fPIC -o android-compat.so android-compat.c go-syscalls.c -ldl
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdio.h>
@@ -37,6 +37,15 @@ static const char *main_program(void)
         strip_base(resolved);
     }
     return resolved;
+}
+
+// 7. Go programs: their raw syscalls bypass every wrapper here and fakechroot's; see go-syscalls.c.
+void go_syscalls_init(const char *program, const char *self_guest);
+
+__attribute__((constructor)) static void android_compat_init(void)
+{
+    if (program_invocation_name && program_invocation_name[0] == '/')
+        go_syscalls_init(program_invocation_name, main_program());
 }
 
 static int is_self_exe(const char *path)

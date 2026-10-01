@@ -43,6 +43,10 @@ cp -a "$OMARCHY_PATH"/config/. ~/.config/
 # Omarchy's terminal preference list (foot first).
 cp "$OMARCHY_PATH"/default/xdg-terminal-exec/hyprland-xdg-terminals.list ~/.config/xdg-terminals.list
 
+# kitty: spawn bash directly. Its default (kitten run-shell + shell integration) works only partly without proot.
+grep -q '^shell /usr/bin/bash' ~/.config/kitty/kitty.conf 2>/dev/null ||
+  printf '\n# Android/no-proot: spawn bash directly\nshell /usr/bin/bash\n' >> ~/.config/kitty/kitty.conf
+
 export PATH="$OMARCHY_PATH/bin:$PATH"
 mkdir -p ~/.config/omarchy/themes
 OMARCHY_THEME_HEADLESS=1 omarchy-theme-set "Tokyo Night" || echo "theme-set reported errors (expected for missing apps)"

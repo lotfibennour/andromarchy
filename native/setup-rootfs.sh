@@ -27,7 +27,17 @@ chmod 755 "$R/usr/bin/ldconfig" "$R/usr/bin/sln"
 
 # Symlinks: absolute -> relative (the kernel follows them outside the rootfs), and links into
 # /dev, /proc, /sys -> absolute (they must reach Android's real ones).
-bash "$HERE/relativize-symlinks.sh" "$R" 2>/dev/null
+bash "$HERE/relativize-symlinks.sh" "$R" 2>/dev/null || true # find hits unreadable proot mount stubs
+
+# Without proot, programs run as the real Android app uid, which /etc/passwd does not know: shells and terminals
+# (kitten run-shell, su, ssh...) then get /sbin/nologin. Give that uid an account with /root and bash.
+uid=$(id -u) gid=$(id -g)
+if grep -q "^[^:]*:[^:]*:$uid:" "$R/etc/passwd"; then # proot-distro's entry: home "/", shell /sbin/nologin
+  sed -i -E "s|^([^:]*:[^:]*:$uid:[^:]*:[^:]*):[^:]*:[^:]*$|\1:/root:/usr/bin/bash|" "$R/etc/passwd"
+else
+  echo "android:x:$uid:$gid:Android app user:/root:/usr/bin/bash" >> "$R/etc/passwd"
+fi
+grep -q "^[^:]*:[^:]*:$gid:" "$R/etc/group" || echo "android:x:$gid:" >> "$R/etc/group"
 
 # Absolute RUNPATH/RPATH entries (e.g. libproxy -> /usr/lib/libproxy) are resolved by the loader on Android's
 # real filesystem, not through fakechroot. Collect them once; arch-native.sh adds ld.so.conf.d dirs to its path.
