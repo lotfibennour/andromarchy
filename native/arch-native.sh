@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Runs a command from the Arch rootfs WITHOUT proot:
-#  - Termux's glibc (patched for Android seccomp) is the loader for Arch's binaries,
+#  - Arch's OWN glibc, with the syscalls Android's seccomp kills neutralized (patch-glibc-syscalls.py), is the loader,
 #  - fakechroot (LD_PRELOAD) makes the rootfs look like /,
 #  - every exec goes back through the same loader (FAKECHROOT_ELFLOADER),
 #  - with ARCH_ROOT=1, fakeroot (TCP build in /usr/local, Android has no SysV IPC) fakes uid 0 and file owners.
@@ -8,16 +8,27 @@
 unset LD_PRELOAD # Termux's libtermux-exec.so is a Bionic library, glibc cannot load it
 
 R=${ARCH_ROOTFS:-/data/data/com.termux/files/usr/var/lib/proot-distro/containers/archlinux/rootfs}
-G=/data/data/com.termux/files/usr/glibc/lib
+# ld.so + libc.so.6 from Arch with set_robust_list/rseq patched to ENOSYS. (Termux's patched glibc 2.44 works for
+# most programs, but Qt's QML JS engine aborts on it with heap corruption, so the rootfs's own glibc is used.)
+G=/data/data/com.termux/files/home/native/arch-glibc
+HOME_TERMUX=/data/data/com.termux/files/home
 FC=$R/usr/lib/libfakeroot/fakechroot/libfakechroot.so
 FR=$R/usr/local/lib/libfakeroot.so
-LOADER="$G/ld-linux-aarch64.so.1 --library-path $G:$R/usr/lib"
 
 export FAKECHROOT_BASE=$R
 # No FAKECHROOT_ELFLOADER_OPT_ARGV0: with it, fakechroot 2.20.1 drops the script path when exec'ing a #! script.
 export FAKECHROOT_ELFLOADER=$G/ld-linux-aarch64.so.1
-export FAKECHROOT_EXCLUDE_PATH=/dev:/proc:/sys
-export LD_LIBRARY_PATH=$G:$R/usr/lib
+# ARCH_EXCLUDE_EXTRA / ARCH_LIBPATH_EXTRA: host paths that must stay host paths (e.g. Termux's tmp with the
+# Anland/Wayland sockets) and extra host library dirs searched first (e.g. our aquamarine build).
+export FAKECHROOT_EXCLUDE_PATH=/dev:/proc:/sys${ARCH_EXCLUDE_EXTRA:+:$ARCH_EXCLUDE_EXTRA}
+# We never use /etc/ld.so.cache (ldconfig is a no-op here), so the extra dirs packages declare in
+# /etc/ld.so.conf.d (e.g. /usr/lib/libproxy for quickshell) go on the search path explicitly.
+LIBDIRS=$R/usr/lib
+for d in $(cat "$R"/etc/ld.so.conf.d/*.conf 2>/dev/null | grep -E '^/'); do
+  [ -d "$R$d" ] && LIBDIRS=$LIBDIRS:$R$d
+done
+export LD_LIBRARY_PATH=${ARCH_LIBPATH_EXTRA:+$ARCH_LIBPATH_EXTRA:}$G:$LIBDIRS
+LOADER="$G/ld-linux-aarch64.so.1 --library-path $LD_LIBRARY_PATH" # same libs for the first process and its children
 export PATH=/usr/local/bin:/usr/bin HOME=/root
 PRELOAD=$FC
 # A cwd outside the rootfs cannot be expressed inside it (getcwd fails): start in the fake $HOME.

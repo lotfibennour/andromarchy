@@ -7,6 +7,20 @@
 set -euo pipefail
 R=${1:-/data/data/com.termux/files/usr/var/lib/proot-distro/containers/archlinux/rootfs}
 
+# proot --link2symlink emulates hard links (forbidden by SELinux for apps) with symlinks into $R/.l2s whose target
+# embeds the rootfs's HOST path. Strip everything up to the rootfs and relink inside it. Also repairs links an older
+# version of this script mangled into "../../data/data/.../rootfs/...".
+RB=${R#/}
+h=0
+while IFS= read -r -d '' link; do
+  target=$(readlink "$link")
+  guest_target=/${target##*"$RB"/}
+  guest_dir=$(dirname "/${link#"$R"/}")
+  ln -sfn "$(realpath -m -s --relative-to="$guest_dir" "$guest_target")" "$link"
+  h=$((h + 1))
+done < <(find "$R" -xdev -type l -lname "*$RB/*" -print0 2>/dev/null)
+echo "rewrote $h links that embedded the rootfs host path (proot hard-link emulation)"
+
 n=0
 while IFS= read -r -d '' link; do
   target=$(readlink "$link")
@@ -31,5 +45,5 @@ while IFS= read -r -d '' link; do
   case $guest in
     /dev/* | /proc/* | /sys/*) ln -sfn "$guest" "$link"; a=$((a + 1)) ;;
   esac
-done < <(find "$R" -xdev -type l -print0 2>/dev/null)
+done < <(find "$R" -xdev -type l \( -lname '*proc/*' -o -lname '*dev/*' -o -lname '*sys/*' \) ! -lname '/*' -print0 2>/dev/null)
 echo "made $a links into /dev, /proc, /sys absolute"

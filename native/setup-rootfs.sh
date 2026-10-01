@@ -28,4 +28,11 @@ chmod 755 "$R/usr/bin/ldconfig" "$R/usr/bin/sln"
 # Symlinks: absolute -> relative (the kernel follows them outside the rootfs), and links into
 # /dev, /proc, /sys -> absolute (they must reach Android's real ones).
 bash "$HERE/relativize-symlinks.sh" "$R" 2>/dev/null
+
+# Absolute RUNPATH/RPATH entries (e.g. libproxy -> /usr/lib/libproxy) are resolved by the loader on Android's
+# real filesystem, not through fakechroot. Collect them once; arch-native.sh adds ld.so.conf.d dirs to its path.
+find "$R/usr/lib" "$R/usr/bin" -xdev -type f \( -name '*.so*' -o -perm -u+x \) -size +1k 2>/dev/null |
+  xargs readelf -d 2>/dev/null | grep -oE '(RUNPATH|RPATH).*\[[^]]*\]' | sed -E 's/.*\[(.*)\]/\1/' | tr ':' '\n' |
+  grep -E '^/' | sort -u > "$R/etc/ld.so.conf.d/zz-runpath-no-proot.conf"
+echo "runpath dirs: $(wc -l < "$R/etc/ld.so.conf.d/zz-runpath-no-proot.conf")"
 echo "rootfs ready for arch-native.sh"
