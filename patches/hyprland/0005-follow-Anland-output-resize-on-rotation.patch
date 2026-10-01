@@ -1,0 +1,21 @@
+From: Lotfix
+Subject: [PATCH] output: follow Anland output resizes (tablet rotation)
+
+Anland resizes its output when the Android device rotates. Hyprland only
+honours a sized state event for user-created outputs; accept it when ANLAND
+is set, so the monitor follows portrait and landscape.
+---
+diff --git a/src/output/Monitor.cpp b/src/output/Monitor.cpp
+index e69d8dd..1b63af8 100644
+--- a/src/output/Monitor.cpp
++++ b/src/output/Monitor.cpp
+@@ -225,7 +225,8 @@ void CMonitor::onConnect(bool noRule) {
+             return;
+         }
+ 
+-        if (!m_createdByUser)
++        // Anland: Android resizes the output when the tablet rotates; follow it like a user-created output.
++        if (!m_createdByUser && !getenv("ANLAND"))
+             return;
+ 
+         const auto SIZE = event.size;

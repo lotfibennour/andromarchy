@@ -711,12 +711,12 @@ index 0000000..7a90b94
 +    }
 +
 +    // The Android side sizes its buffers to the screen orientation it had when it (re)connected:
-+    // after a rotation the output mode follows, and the compositor reconfigures (events.state, like the Wayland backend).
++    // after a rotation the output mode follows, and the compositor resizes the monitor (events.state with the size).
 +    if (output && size != oldSize) {
 +        fprintf(stderr, "anland: screen is now %.0fx%.0f\n", size.x, size.y);
 +        output->modes.clear();
 +        output->modes.emplace_back(SP<SOutputMode>(new SOutputMode(size, (unsigned int)refreshmHz, true)));
-+        output->events.state.emit(IOutput::SStateEvent{.size = size});
++        output->events.state.emit(IOutput::SStateEvent{.size = size}); // Hyprland patch 0005 honours it for Anland
 +    }
 +
 +    backend->log(AQ_LOG_DEBUG, std::format("anland: consumer back, {} buffers of {}", buffers.size(), size));
