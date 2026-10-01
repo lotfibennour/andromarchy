@@ -1,0 +1,28 @@
+diff --git a/src/protocols/LinuxDMABUF.cpp b/src/protocols/LinuxDMABUF.cpp
+index 897c98d..74b6add 100644
+--- a/src/protocols/LinuxDMABUF.cpp
++++ b/src/protocols/LinuxDMABUF.cpp
+@@ -445,6 +445,11 @@ CLinuxDMABufV1Protocol::CLinuxDMABufV1Protocol(const wl_interface* iface, const
+         int  rendererFD = g_pCompositor->m_drmRenderNode.fd >= 0 ? g_pCompositor->m_drmRenderNode.fd : g_pCompositor->m_drm.fd;
+         auto dev        = devIDFromFD(rendererFD);
+ 
++        // Anland (Android): no DRM node exists, but the KGSL Mesa can still share dmabufs. Advertise the protocol
++        // with device 0, like the KWin Anland backend does, so GPU clients get a way to hand us their buffers.
++        if (!dev.has_value() && getenv("ANLAND"))
++            dev = dev_t{0};
++
+         if (!dev.has_value()) {
+             LOGM(Log::ERR, "failed to get drm dev, disabling linux dmabuf");
+             removeGlobal();
+@@ -501,6 +506,11 @@ CLinuxDMABufV1Protocol::CLinuxDMABufV1Protocol(const wl_interface* iface, const
+ 
+         m_formatTable = makeUnique<CDMABUFFormatTable>(eglTranche, tches);
+ 
++        // Anland: device 0 is not a DRM node; keep the protocol, without the render-node checks
++        // (same as the "no render node" branch below).
++        if (getenv("ANLAND"))
++            return;
++
+         drmDevice* device = nullptr;
+         if (drmGetDeviceFromDevId(m_mainDevice, 0, &device) != 0) {
+             LOGM(Log::ERR, "failed to get drm dev, disabling linux dmabuf");

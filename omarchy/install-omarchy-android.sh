@@ -40,7 +40,7 @@ chmod +x /usr/local/bin/systemd-cat
 # User config, same layout as Omarchy's install (config/ -> ~/.config).
 mkdir -p ~/.config
 cp -a "$OMARCHY_PATH"/config/. ~/.config/
-# foot first: it renders on the CPU, GPU clients (alacritty) need linux-dmabuf, not available yet (PLAN A.4).
+# Omarchy's terminal preference list (foot first).
 cp "$OMARCHY_PATH"/default/xdg-terminal-exec/hyprland-xdg-terminals.list ~/.config/xdg-terminals.list
 
 export PATH="$OMARCHY_PATH/bin:$PATH"
