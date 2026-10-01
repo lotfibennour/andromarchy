@@ -19,7 +19,7 @@ pacman -S --noconfirm --needed \
 rm -rf "$OMARCHY_PATH"
 cp -a "$SRC" "$OMARCHY_PATH"
 # A clone made on Windows has CRLF line endings, which break every omarchy-* script.
-grep -rlIZ $'' "$OMARCHY_PATH" | xargs -0 -r sed -i 's/$//'
+grep -rlIZ $'\r' "$OMARCHY_PATH" | xargs -0 -r sed -i 's/\r$//'
 
 # No journald on Android: omarchy-launch-shell runs the shell through systemd-cat.
 cat > /usr/local/bin/systemd-cat <<'EOF'
