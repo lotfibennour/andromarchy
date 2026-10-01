@@ -43,6 +43,11 @@ grep -q "^[^:]*:[^:]*:$gid:" "$R/etc/group" || echo "android:x:$gid:" >> "$R/etc
 # Arch ships it empty and read-only: replace it rather than write into it.
 [ -s "$R/etc/machine-id" ] || { rm -f "$R/etc/machine-id"; tr -d '-' < /proc/sys/kernel/random/uuid > "$R/etc/machine-id"; }
 
+# Extracted without "tar -p", Termux's umask 077 leaves /tmp and its X11 socket dir at 700: Hyprland then never
+# starts Xwayland. Sticky world-writable as on any Linux.
+mkdir -p "$R/tmp/.X11-unix" "$R/tmp/.ICE-unix"
+chmod 1777 "$R/tmp" "$R/var/tmp" "$R/tmp/.X11-unix" "$R/tmp/.ICE-unix"
+
 # DNS: Android keeps its resolvers out of reach (no readable resolv.conf, netd only for bionic). Public ones,
 # as proot-distro does. The build removes the PC's copy.
 [ -s "$R/etc/resolv.conf" ] || { rm -f "$R/etc/resolv.conf"; printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "$R/etc/resolv.conf"; }

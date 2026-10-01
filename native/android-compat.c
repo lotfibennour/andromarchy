@@ -161,6 +161,74 @@ int memfd_create(const char *name, unsigned int flags)
     return next(name, flags);
 }
 
+// 3b. Hard links: Android's SELinux denies them to apps (EACCES). X servers create their lock file by linking a
+//     temp file into place ("Linking lock file in place failed"). Fall back to an exclusive copy: same "only one
+//     creator wins" guarantee, but a separate inode (later writes to one name do not show in the other).
+static int copy_excl(int olddirfd, const char *old, int newdirfd, const char *new)
+{
+    int in = openat(olddirfd, old, O_RDONLY | O_CLOEXEC);
+    if (in < 0)
+        return -1;
+    struct stat st;
+    int out = fstat(in, &st) < 0 || !S_ISREG(st.st_mode)
+                  ? (errno = EACCES, -1)
+                  : openat(newdirfd, new, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, st.st_mode & 07777);
+    if (out < 0) {
+        int e = errno;
+        close(in);
+        errno = e;
+        return -1;
+    }
+    char buf[65536];
+    ssize_t n;
+    while ((n = read(in, buf, sizeof buf)) > 0)
+        if (write(out, buf, n) != n) {
+            n = -1;
+            break;
+        }
+    close(in);
+    close(out);
+    if (n < 0) {
+        unlinkat(newdirfd, new, 0);
+        return -1;
+    }
+    return 0;
+}
+
+int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int flags)
+{
+    static int (*next)(int, const char *, int, const char *, int);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "linkat");
+    int r = next(olddirfd, old, newdirfd, new, flags);
+    return r < 0 && (errno == EACCES || errno == EPERM) ? copy_excl(olddirfd, old, newdirfd, new) : r;
+}
+
+int link(const char *old, const char *new)
+{
+    return linkat(AT_FDCWD, old, AT_FDCWD, new, 0);
+}
+
+// 3c. setgid/setuid: Android's seccomp kills them even when they change nothing. Programs dropping privileges they
+//     never had call them with the current ids (Xwayland before running xkbcomp: "Bad system call"). Those succeed as
+//     the no-ops they are; anything else fails like an unprivileged process would.
+// ponytail: only setgid/setuid seen so far; same treatment for setre*/setres* if a program needs it.
+int setgid(gid_t g)
+{
+    if (g == getgid() && g == getegid())
+        return 0;
+    errno = EPERM;
+    return -1;
+}
+
+int setuid(uid_t u)
+{
+    if (u == getuid() && u == geteuid())
+        return 0;
+    errno = EPERM;
+    return -1;
+}
+
 // 4. accept(): Android's app seccomp filter only allows accept4 on arm64 (bionic never uses accept), and glibc has
 //    no fallback for it, so every server dies with SIGSYS (fakeroot's faked, local web servers...). Same call.
 #include <sys/socket.h>
