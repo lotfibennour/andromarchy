@@ -19,8 +19,8 @@ case ${1:-} in
   "")
     tag=$(sed -n 's/^# andromarchy-dns: //p' "$R" 2>/dev/null)
     if [ -n "$tag" ]; then echo "$tag"
-    elif grep -q '^nameserver 1\.1\.1\.1' "$R" 2>/dev/null; then echo Cloudflare
-    elif grep -q '^nameserver 8\.8\.8\.8' "$R" 2>/dev/null; then echo Google
+    elif [ "$(awk '/^nameserver/ {print $2; exit}' "$R" 2>/dev/null)" = 1.1.1.1 ]; then echo Cloudflare
+    elif [ "$(awk '/^nameserver/ {print $2; exit}' "$R" 2>/dev/null)" = 8.8.8.8 ]; then echo Google
     else echo Custom
     fi ;;
   Cloudflare | cloudflare) write Cloudflare 1.1.1.1 1.0.0.1 ;;
