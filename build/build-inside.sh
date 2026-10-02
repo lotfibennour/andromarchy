@@ -84,8 +84,13 @@ install -m 755 $L/native/pkexec-shim.sh /usr/local/bin/pkexec
 rm -rf /tmp/brave && git clone -q https://aur.archlinux.org/brave-origin-bin.git /tmp/brave
 if [ -n "${LOTFIX_NATIVE:-}" ]; then
   pacman -S --noconfirm --needed $(cd /tmp/brave && source ./PKGBUILD && echo "${depends[@]}")
-  (cd /tmp/brave && env -u FAKEROOTKEY LD_PRELOAD="$(printf '%s' "$LD_PRELOAD" | tr ':' '\n' | grep -v libfakeroot.so |
-    paste -sd:)" makepkg --noconfirm 2>&1 | tail -3)
+  # makepkg packages under Arch's fakeroot, which takes our fakechroot (its path holds "libfakeroot") for a nested
+  # fakeroot and stops. Owners do not matter here: a fakeroot that just runs the command.
+  mkdir -p /tmp/nofakeroot && printf '#!/bin/sh\n[ "$1" = -- ] && shift\nexec "$@"\n' > /tmp/nofakeroot/fakeroot
+  chmod 755 /tmp/nofakeroot/fakeroot
+  (cd /tmp/brave && env -u FAKEROOTKEY PATH=/tmp/nofakeroot:$PATH LD_PRELOAD="$(printf '%s' "$LD_PRELOAD" |
+    tr ':' '\n' | grep -v libfakeroot.so | paste -sd:)" makepkg --noconfirm 2>&1 | tail -3)
+  rm -rf /tmp/nofakeroot
 else
   useradd -m aurbuild 2>/dev/null || true
   chown -R aurbuild /tmp/brave
