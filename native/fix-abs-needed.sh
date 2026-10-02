@@ -12,6 +12,9 @@ fix() {
   needed=$(readelf -d "$f" 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(\/[^]]*\)\]/\1/p') || return 0
   for n in $needed; do
     patchelf --replace-needed "$n" "${n##*/}" "$f" && echo "fix-abs-needed: $f: $n -> ${n##*/}"
+    # The bare name must still be found: put the library's directory on the search path (lotfix-run reads
+    # /etc/ld.so.conf.d). nvim -> /usr/lib/lua/5.1/lpeg.so broke without it.
+    grep -qxF "${n%/*}" /etc/ld.so.conf.d/zz-abs-needed.conf 2>/dev/null || echo "${n%/*}" >> /etc/ld.so.conf.d/zz-abs-needed.conf
   done
 }
 

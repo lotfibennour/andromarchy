@@ -387,6 +387,9 @@ static int android_blocked(long nr)
     case SYS_faccessat2:
     case SYS_setfsuid:
     case SYS_setfsgid:
+    // statx takes a path, and a raw syscall bypasses fakechroot (libuv's stat, hence neovim: "/root" missing,
+    // runtime not found). With ENOSYS, libuv falls back to fstatat through libc, which fakechroot rewrites.
+    case SYS_statx:
         return 1;
     default:
         return 0;
