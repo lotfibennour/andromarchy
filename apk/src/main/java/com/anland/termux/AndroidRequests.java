@@ -11,7 +11,7 @@ import java.nio.file.Files;
 
 /**
  * Requests from the Linux session for things only Android can do, written to run/android-request by the
- * android-request helper (atomically, by rename): "wifi-panel", "open <package>".
+ * android-request helper (atomically, by rename): "wifi-panel", "open <package>" (full screen), "split <package>" (beside Andromarchy).
  */
 final class AndroidRequests extends FileObserver {
     private static final String TAG = "AndroidRequests";
@@ -38,8 +38,12 @@ final class AndroidRequests extends FileObserver {
         Intent intent = null;
         if (req[0].equals("wifi-panel"))
             intent = new Intent(Settings.Panel.ACTION_WIFI); // apps may not switch Wi-Fi themselves
-        else if (req[0].equals("open") && req.length == 2)
+        else if ((req[0].equals("open") || req[0].equals("split")) && req.length == 2) {
             intent = ctx.getPackageManager().getLaunchIntentForPackage(req[1].trim());
+            // split: beside Andromarchy (Android's split screen; a tablet enters it from full screen)
+            if (intent != null && req[0].equals("split"))
+                intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        }
         if (intent == null) {
             Log.w(TAG, "unknown request: " + line);
             return;
