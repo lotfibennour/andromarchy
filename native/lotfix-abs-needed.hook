@@ -1,0 +1,14 @@
+# Android/no-proot: rewrite absolute NEEDED entries (e.g. mpv -> /usr/lib/libmujs.so) of newly installed binaries
+# to bare names; ld.so would open them on Android's filesystem (see /opt/lotfix/fix-abs-needed.sh).
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/bin/*
+Target = usr/lib/*
+
+[Action]
+Description = Fixing absolute library paths for Android (Lotfix)...
+When = PostTransaction
+Exec = /bin/bash /opt/lotfix/fix-abs-needed.sh
+NeedsTargets
