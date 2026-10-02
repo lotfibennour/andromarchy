@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Andromarchy session (SessionService): foreground service + wake lock, or HyperOS kills it -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
@@ -43,6 +46,9 @@
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".SessionService"
+            android:exported="false" />
         <receiver
             android:name=".UserActionReceiver"
             android:exported="false" />

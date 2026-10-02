@@ -66,3 +66,32 @@ android {
         abortOnError = false
     }
 }
+
+// Executables the app runs, built with the NDK and shipped as lib*.so so that Android extracts them to the
+// executable nativeLibraryDir: the Anland display daemon and lotfix-run (the Arch launcher, ../native/launcher).
+// 16 KB-aligned segments for Android 15+ devices with 16 KB pages.
+def jniOut = file("src/main/jniLibs/arm64-v8a")
+def executables = [
+    "libanland.so"   : ["native/anland/anland.c", "native/anland/common/socket_utils.c"],
+    "liblotfixrun.so": ["../native/launcher/lotfix-run.c"],
+]
+tasks.register("buildExecutables") {
+    inputs.files(executables.values().flatten())
+    outputs.dir(jniOut)
+    doLast {
+        def host = System.getProperty("os.name").toLowerCase().contains("windows") ? "windows-x86_64" :
+                   System.getProperty("os.name").toLowerCase().contains("mac") ? "darwin-x86_64" : "linux-x86_64"
+        def ndk = androidComponents.sdkComponents.ndkDirectory.get().asFile
+        def clang = "${ndk}/toolchains/llvm/prebuilt/${host}/bin/aarch64-linux-android30-clang" +
+                    (host == "windows-x86_64" ? ".cmd" : "")
+        jniOut.mkdirs()
+        executables.each { name, srcs ->
+            def proc = ([clang, "-O2", "-Wall", "-pie", "-Wl,-z,max-page-size=16384",
+                         "-o", new File(jniOut, name).path] + srcs.collect { file(it).path }).execute()
+            proc.waitForProcessOutput(System.out, System.err)
+            if (proc.exitValue() != 0)
+                throw new GradleException("NDK build of ${name} failed")
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn("buildExecutables") }

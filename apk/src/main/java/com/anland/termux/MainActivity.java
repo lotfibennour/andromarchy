@@ -297,6 +297,14 @@ public class MainActivity extends Activity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Andromarchy: this app is also the Linux side. Start the session (daemon, audio, Hyprland) if the Arch
+        // rootfs is installed; this activity then connects to the daemon like the Termux version did.
+        if (SessionService.rootfsReady(this))
+            SessionService.start(this);
+        else
+            android.widget.Toast.makeText(this, "Arch rootfs missing: " + SessionService.rootfs(this),
+                    android.widget.Toast.LENGTH_LONG).show();
+
         setupMediaAudio();
         applyScreenOrientation();
 
