@@ -67,6 +67,8 @@ install -m 755 $L/native/sudo-shim.sh /usr/local/bin/sudo
 install -m 755 $L/native/bwrap-shim.sh /usr/local/bin/bwrap
 # pkexec (polkit, setuid) -> the same fake root as sudo.
 install -m 755 $L/native/pkexec-shim.sh /usr/local/bin/pkexec
+# No udev daemon on Android: udevadm control/trigger/settle succeed as no-ops.
+install -m 755 $L/native/udevadm-shim.sh /usr/local/bin/udevadm
 # Edit menu on a long touch press (the app writes to run/longpress).
 install -m 755 $L/native/longpress-menu.sh /usr/local/bin/andromarchy-longpress
 curl -fsSL -o /tmp/yay.tgz https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_aarch64.tar.gz

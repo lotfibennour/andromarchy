@@ -589,6 +589,18 @@ static FILE *guest_maps(FILE *real)
 FOPEN_WRAP(fopen)
 FOPEN_WRAP(fopen64)
 
+// Sources of hard-link fallbacks (section 3b): stat reports 2 links for them, like a real link() would. shadow's
+// lock (useradd, usermod, groupadd...) links a temp file to passwd.lock and checks exactly that ("lock file
+// already used (nlink: 1)"). ponytail: last 8 paths, never forgotten (temp names carry a pid, a reuse is harmless).
+static char linked_copies[8][512];
+static int linked_copy(const char *path)
+{
+    for (int i = 0; path && i < 8; i++)
+        if (linked_copies[i][0] && strcmp(linked_copies[i], path) == 0)
+            return 1;
+    return 0;
+}
+
 // stat/access on the faked /proc files: programs test them before opening (LibreOffice: "/proc not mounted").
 // Answer with the attributes of a readable /proc file.
 #include <sys/stat.h>
@@ -599,6 +611,8 @@ FOPEN_WRAP(fopen64)
         if (!next)                                                                                                     \
             next = dlsym(RTLD_NEXT, #name);                                                                            \
         int r = next(path, st);                                                                                        \
+        if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
+            st->st_nlink = 2;                                                                                          \
         return r < 0 && errno == EACCES && IS_UPTIME(path) ? next("/proc/self/stat", st) : r;                          \
     }
 STAT_WRAP(stat, struct stat)
@@ -612,6 +626,8 @@ STAT_WRAP(lstat64, struct stat64)
         if (!next)                                                                                                     \
             next = dlsym(RTLD_NEXT, #name);                                                                            \
         int r = next(dirfd, path, st, flags);                                                                          \
+        if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
+            st->st_nlink = 2;                                                                                          \
         return r < 0 && errno == EACCES && IS_UPTIME(path) ? next(AT_FDCWD, "/proc/self/stat", st, flags) : r;         \
     }
 FSTATAT_WRAP(fstatat, struct stat)
@@ -666,7 +682,13 @@ int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int fla
     if (!next)
         next = dlsym(RTLD_NEXT, "linkat");
     int r = next(olddirfd, old, newdirfd, new, flags);
-    return r < 0 && (errno == EACCES || errno == EPERM) ? copy_excl(olddirfd, old, newdirfd, new) : r;
+    if (r < 0 && (errno == EACCES || errno == EPERM)) {
+        r = copy_excl(olddirfd, old, newdirfd, new);
+        static int slot;
+        if (r == 0 && olddirfd == AT_FDCWD && strlen(old) < sizeof linked_copies[0])
+            strcpy(linked_copies[slot++ % 8], old);
+    }
+    return r;
 }
 
 int link(const char *old, const char *new)
@@ -1422,4 +1444,20 @@ int open_by_handle_at(int mount_fd, struct file_handle *h, int flags)
     (void)mount_fd, (void)h, (void)flags;
     errno = EOPNOTSUPP;
     return -1;
+}
+
+// Audit netlink socket: SELinux refuses it to apps (EACCES), and shadow's useradd/usermod/groupadd abort on that
+// ("Cannot open audit interface"). Answer like a kernel built without audit, which they accept.
+#include <linux/netlink.h>
+#include <sys/socket.h>
+int socket(int domain, int type, int protocol)
+{
+    static int (*next)(int, int, int);
+    if (domain == AF_NETLINK && protocol == NETLINK_AUDIT) {
+        errno = EPROTONOSUPPORT;
+        return -1;
+    }
+    if (!next)
+        next = dlsym(RTLD_NEXT, "socket");
+    return next(domain, type, protocol);
 }
