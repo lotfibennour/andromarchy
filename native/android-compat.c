@@ -7,6 +7,7 @@
 // Build (rootfs): gcc -O2 -shared -fPIC -o android-compat.so android-compat.c go-syscalls.c -ldl
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <sys/prctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -96,6 +97,11 @@ __attribute__((constructor)) static void android_compat_init(int argc, char **ar
         // (gcc: cc1, specs...) then build host paths that fakechroot prefixes a second time. Show the guest path.
         strip_base(program_invocation_name); // in place: argv[0] is the same string
     }
+    // Started through the loader, every process was named "ld-linux-aarch6" (/proc/N/comm): pkill/killall/pgrep by
+    // name found nothing, so stray instances of single-instance apps survived (Dolphin then closed at once).
+    const char *prog = main_program();
+    if (prog && strrchr(prog, '/'))
+        prctl(PR_SET_NAME, strrchr(prog, '/') + 1);
 }
 
 static int is_self_exe(const char *path)
