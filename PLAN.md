@@ -152,14 +152,13 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 | 4.7 | **Mises à jour** : ✅ hook pacman qui repatche glibc (2026-10-02, testé) ; mise à jour de l'appli et du système. | `pacman -Syu` avec une nouvelle glibc ne casse rien. |
 | 4.8 | **Test grand public.** | Installation → bureau Omarchy en moins de 10 minutes. |
 | 4.9 | **Pont d'état Android** : l'appli lit batterie, réseau, volume et luminosité (API Android, `/sys` étant interdit) et les transmet au système Arch (faux UPower, etc.) ; réglage du volume et de la luminosité via Android. Pas de gestion du Wi-Fi ni du Bluetooth depuis Linux. | La barre d'Omarchy affiche le niveau de batterie et l'état du réseau. |
+| ✅ Applis (2026-10-02) | **Validés par l'utilisateur dans Andromarchy** : son (PipeWire lancé par l'appli) ; bus D-Bus de session (dialogues « Enregistrer sous » de Firefox) ; **Brave / Chromium** (`--no-sandbox`, exec de `/proc/self/exe`, mémoire partagée en lecture seule via `/tmp/.shm`) ; `bwrap` simplifié (décodeurs d'images glycin de GTK) ; menu Install d'Omarchy (`sudo` en faux root, `yay`) ; éditeur de réglages (`systemd-run` simplifié, neovim). | |
 
 ## Problèmes connus (à corriger plus tard)
 
 | Problème | Ce qu'on sait | Pistes |
 |---|---|---|
 | **Firefox : rendu saccadé, fenêtre qui clignote** (vidéo, défilement, interface) | Propre à Firefox : mpv en GPU est stable. Identique sur l'ancien et le nouveau système Arch, avec ou sans pont audio et patch 0005 (tests A/B du 2026-10-02) : ce n'est pas une régression. Corrigés en chemin : GPU (`/proc/bus/pci/devices` vide, `gfx.blocklist.all=-1`), mémoire partagée en RAM (réouverture de memfd émulée). Forcer l'alpha à 1 en sortie (patch 0006) a aggravé : retiré. | Synchronisation vsync/frame callbacks de Firefox (`widget.wayland.*`), comparer avec Chromium, journaux `MOZ_LOG` de la couche Wayland. |
-| **Firefox plante sur « Enregistrer le lien sous… »** | Pas de rapport de plantage. | Pas de bus D-Bus de session (sans systemd) : lancer `dbus-daemon --session` avec la session, puis `xdg-desktop-portal(-gtk/-hyprland)`. Relancer Firefox avec sa sortie d'erreurs pour confirmer. |
-| **Audio : démarrage manuel** | Le pont PipeWire marche (son validé), mais PipeWire, WirePlumber et pipewire-pulse ont été lancés à la main. | Les démarrer avec la session (autostart ou services utilisateur), puis commiter le pont audio d'aquamarine (`anland_audio.c`). |
 
 ## Phase 5 : maintenance
 
