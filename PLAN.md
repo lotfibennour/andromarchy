@@ -7,7 +7,7 @@ Appareil cible : POCO Pad 2 Pro (Android 16, Snapdragon/Adreno).
 ## Choix fixés
 
 - **Pas de proot.** Le shim LD_PRELOAD (fakechroot + fakeroot portés) gère les binaires dynamiques, et un loader `SECCOMP_RET_TRAP` + handler SIGSYS gère les binaires statiques.
-- **Affichage :** Anland (GPL-3.0), avec le client `libawl` intégré dans l'APK.
+- **Affichage :** Anland (GPL-3.0), fusionné avec termux-app dans une seule APK `org.lotfix` (phase 4).
 - **Pas de gestion du matériel** : réseau, Bluetooth, luminosité (limite n°8 abandonnée).
 - **Abandonnés :** seccomp USER_NOTIF, unshare/namespaces, vrai systemd.
 
@@ -118,14 +118,19 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 
 ## Phase 4 : l'APK unique
 
+**Décision (2026-10-02) :** une seule APK qui fusionne le code de **termux-app** et d'**anland-termux** (GPL-3.0), sous un **nom de paquet propre et court** (`org.lotfix`, limite `sun_path` de 108 octets). Elle **coexiste** avec un Termux officiel déjà installé. On ne garde de Termux que le code Java (service de premier plan, wake-lock, terminal) et une **petite base recompilée** pour `/data/data/org.lotfix/files/usr` : `bash`, `coreutils`, `tar`, `zstd`, `curl`, le démon Anland. Pas de `pkg` dans l'appli : tout le reste passe par `pacman` dans Arch. Termux:API n'est pas pris en charge.
+
 | # | Étape | Critère de réussite |
 |---|---|---|
-| 4.1 | APK targetSdk 28 + extraction (ou téléchargement) de la rootfs. | Au premier lancement, rootfs prête sans terminal. |
-| 4.2 | Client d'affichage Anland intégré (`libawl`), sans Termux. | Hyprland s'affiche dans l'app, Termux désinstallé. |
-| 4.3 | Foreground service + écran d'aide « processus enfants ». | Session vivante après 1 heure en arrière-plan. |
-| 4.4 | Cycle de vie : veille, rotation, retour. | La session survit à 10 cycles veille/réveil. |
-| 4.5 | Test grand public (avec l'activation du service clavier). | Appareil vierge : installation → bureau Omarchy en moins de 10 minutes. |
-| 4.6 | **Clavier dédié** : `AccessibilityService` (`flagRequestFilterKeyEvents`) actif seulement au premier plan, `requestPointerCapture()` pour la souris, onboarding (dont « Autoriser les paramètres restreints »). | Super+Entrée ouvre un terminal dans Hyprland, Alt+Tab n'ouvre **pas** les récents d'Android, et hors de l'app le clavier se comporte normalement. |
+| 4.0 | **Étude** de termux-app et d'anland-termux : où sont l'activité d'affichage, le démon et le pont entre eux ; liste exacte des paquets de la petite base. | Schéma de fusion validé, sans inconnue. |
+| 4.1 | **Petite base recompilée** pour `org.lotfix` (termux-packages, préfixe personnalisé) + démon Anland. | `bash`, `tar`, `zstd`, `curl`, `anland` tournent depuis `/data/data/org.lotfix`. |
+| 4.2 | **Fusion** : fork de termux-app renommé, activité et service d'affichage d'Anland intégrés ; l'appli s'ouvre sur Omarchy, le terminal reste accessible. | Une seule APK affiche Omarchy, à côté d'un Termux officiel installé. |
+| 4.3 | **Premier lancement** : petite base, puis téléchargement ou import du système Arch, sha256, extraction `tar -p`, `setup-rootfs.sh`, avec une barre de progression. | Appareil vierge : bureau Omarchy sans taper aucune commande. |
+| 4.4 | **Cycle de vie et HyperOS** : un service pour Hyprland et Anland, wake-lock, processus fantômes, « Démarrage automatique », batterie sans restriction, veille/réveil. | Session vivante après 1 h en arrière-plan et 10 cycles veille/réveil. |
+| 4.5 | **Clavier physique dédié** : `AccessibilityService` (`flagRequestFilterKeyEvents`) actif seulement au premier plan, `requestPointerCapture()`, aide aux « paramètres restreints ». | Super+Entrée ouvre un terminal, Alt+Tab reste dans Hyprland, clavier normal hors de l'appli. |
+| 4.6 | **Clavier à l'écran** : clavier Android → Hyprland (touches simples, puis accents/emoji via la saisie de texte Wayland). | Taper dans un terminal et dans Firefox sans clavier physique. |
+| 4.7 | **Mises à jour** : hook pacman qui réapplique le patch seccomp de glibc (**à faire tout de suite**, le risque existe déjà) ; mise à jour de l'appli et du système. | `pacman -Syu` avec une nouvelle glibc ne casse rien. |
+| 4.8 | **Test grand public.** | Installation → bureau Omarchy en moins de 10 minutes. |
 
 ## Phase 5 : maintenance
 
