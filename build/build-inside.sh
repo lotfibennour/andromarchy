@@ -32,7 +32,8 @@ mkdir -p /tmp/mesa && tar -xf $L/mesa.tar -C /tmp/mesa
 pacman -U --noconfirm /tmp/mesa/*.pkg.tar.*
 # The rootfs validated on the tablet (pacman -Qqe), minus debugging-only tools. Omarchy's own list is in
 # omarchy/install-omarchy-android.sh; hyprland/aquamarine come from Arch for their dependencies, then get replaced.
-pacman -S --noconfirm --needed \
+# --overwrite: the native build copied fakechroot's library in beforehand, to start this rootfs.
+pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
   base-devel git cmake ninja pkgconf python autoconf automake libtool po4a \
   hyprland hyprwayland-scanner wayland-protocols glaze cli11 hwdata libdisplay-info libinput seatd pixman \
   fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl \
