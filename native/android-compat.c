@@ -642,6 +642,8 @@ int accept(int fd, struct sockaddr *addr, socklen_t *len)
 static int android_blocked(long nr)
 {
     switch (nr) {
+    case SYS_shmget: case SYS_shmat: case SYS_shmdt: case SYS_shmctl: case SYS_semget: case SYS_semop:
+    case SYS_semtimedop: case SYS_semctl: case SYS_msgget: case SYS_msgsnd: case SYS_msgrcv: case SYS_msgctl:
     case SYS_kcmp:
     case SYS_set_robust_list:
     case SYS_rseq:
@@ -1172,3 +1174,29 @@ int dladdr1(const void *addr, Dl_info *info, void **extra, int flags)
         guest_fname(info);
     return r;
 }
+
+// SysV IPC (shmget, semget, msgget...): Android's seccomp kills the process (Dolphin through KDE/Qt's SysV shared
+// memory: opened and closed at once). Answer ENOSYS like a kernel without SysV IPC; callers fall back (POSIX shm,
+// no MIT-SHM). ponytail: no emulation; add one on /tmp/.shm files if a program has no fallback.
+#define NO_IPC(ret, name, ...)                                                                                         \
+    ret name(__VA_ARGS__)                                                                                              \
+    {                                                                                                                  \
+        errno = ENOSYS;                                                                                                \
+        return (ret)-1;                                                                                                \
+    }
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+NO_IPC(int, shmget, key_t k, size_t s, int f)
+NO_IPC(void *, shmat, int id, const void *a, int f)
+NO_IPC(int, shmdt, const void *a)
+NO_IPC(int, shmctl, int id, int c, struct shmid_ds *b)
+NO_IPC(int, semget, key_t k, int n, int f)
+NO_IPC(int, semop, int id, struct sembuf *o, size_t n)
+NO_IPC(int, semtimedop, int id, struct sembuf *o, size_t n, const struct timespec *t)
+NO_IPC(int, semctl, int id, int n, int c, ...)
+NO_IPC(int, msgget, key_t k, int f)
+NO_IPC(int, msgsnd, int id, const void *m, size_t s, int f)
+NO_IPC(ssize_t, msgrcv, int id, void *m, size_t s, long t, int f)
+NO_IPC(int, msgctl, int id, int c, struct msqid_ds *b)
