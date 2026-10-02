@@ -9,7 +9,12 @@ while [ $# -gt 0 ]; do
     --) shift; break ;;
     --setenv) export "$2=$3"; shift 3 ;;
     --unsetenv) unset "$2"; shift 2 ;;
-    --clearenv) for v in $(compgen -e); do unset "$v"; done; shift ;;
+    # keeps the no-proot runtime (loader, preloads, fakechroot, locales): without it the command cannot even start
+    --clearenv)
+      for v in $(compgen -e); do
+        case $v in LD_*|FAKECHROOT_*|FAKEROOTKEY|PATH|LOCPATH|GCONV_PATH) ;; *) unset "$v" ;; esac
+      done
+      shift ;;
     --chdir) chdir=$2; shift 2 ;;
     # options taking two arguments
     --bind|--bind-try|--ro-bind|--ro-bind-try|--dev-bind|--dev-bind-try|--symlink|--file|--bind-data|--ro-bind-data|\
