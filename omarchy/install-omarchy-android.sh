@@ -108,7 +108,18 @@ if [ ! -d ~/.config/omarchy/plugins/$OSK_ID ]; then
   # wants a keysym name. Use the plugin's own name table for them.
   sed -i 's|    if (codePoint < 0x80) return text|    if (/^[A-Za-z0-9]$/.test(text)) return text\n    // Other ASCII (space, punctuation) needs its keysym name for wtype -k (Andromarchy fix)\n    for (var name in tokenCharMap)\n        if (tokenCharMap[name] === text) return name|' \
     ~/.config/omarchy/plugins/$OSK_ID/KeyboardLayout.js
+  # The space bar typed " " as text (wtype --): apps took it for a special key. Send the space key instead.
+  sed -i 's|^        sendKeys(Layout.buildTypeCommand(text))$|        // Andromarchy: space as the "space" key (typed as text, apps saw a special key)\n        sendKeys(text === " " ? Layout.buildKeyCommand("space") : Layout.buildTypeCommand(text))|' \
+    ~/.config/omarchy/plugins/$OSK_ID/Keyboard.qml
+  # Languages: wtype types any character itself, so the language key only changes the on-screen layout and leaves
+  # the system one (physical keyboard) alone. All keysym names -> characters (Arabic, French accents...).
+  sed -i 's|^        Quickshell.execDetached(\["hyprctl", "switchxkblayout", "all", "next"\])$|        // Andromarchy: wtype types characters itself; keep the system layout (physical keyboard) as is|' \
+    ~/.config/omarchy/plugins/$OSK_ID/Keyboard.qml
+  bash "$(dirname "$0")/osk-keysyms.sh" ~/.config/omarchy/plugins/$OSK_ID
 fi
+# On-screen keyboard languages, read by the plugin from kb_layout (the system layout stays the first one).
+grep -q 'kb_layout = "us,fr,ara"' ~/.config/hypr/input.lua ||
+  printf '\n-- Android/Andromarchy: on-screen keyboard languages (the system layout stays the first one)\nhl.config({ input = { kb_layout = "us,fr,ara" } })\n' >> ~/.config/hypr/input.lua
 # Shown automatically when a text field gets focus, hidden while a physical keyboard is connected (osk-autoshow,
 # built into /usr/local/bin by build-inside.sh). Started with Hyprland.
 grep -q 'osk-autoshow' ~/.config/hypr/autostart.lua ||
