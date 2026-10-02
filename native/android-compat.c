@@ -64,6 +64,8 @@ static void chromium_no_sandbox(int argc, char **argv)
     const char *prog = main_program();
     if (!prog || !argv || strstr(prog, "crashpad") || strstr(prog, "chrome-sandbox"))
         return;
+    if (getenv("ELECTRON_RUN_AS_NODE")) // Electron as plain Node (VS Code's CLI): no Chromium, rejects the flag
+        return;
     char dir[4096];
     snprintf(dir, sizeof dir, "%s", prog);
     char *slash = strrchr(dir, '/');
@@ -413,10 +415,72 @@ static int reopen_or_fail(const char *path)
 
 #define IS_UPTIME(p) (fake_proc((p), (char[512]){0}, 512) >= 0)
 
+// /dev/shm: absent on Android (and /dev stays a host path). Chromium/Electron create shared memory files there
+// (VS Code, Chromium: "Creating shared memory in /dev/shm failed", then a trap). Same place as shm_open: the
+// rootfs's /tmp/.shm.
+static const char *dev_shm(const char *path, char *buf)
+{
+    if (!path || strncmp(path, "/dev/shm", 8) != 0 || (path[8] != '/' && path[8]))
+        return path;
+    mkdir("/tmp/.shm", 01777); // through fakechroot: lands in <rootfs>/tmp/.shm
+    snprintf(buf, 512, "/tmp/.shm%s", path + 8);
+    return buf;
+}
+
+#include <sys/statfs.h>
+#include <sys/statvfs.h>
+#define SHM_PATH_WRAP(ret, name, type)                                                                                \
+    ret name(const char *path, type arg)                                                                               \
+    {                                                                                                                  \
+        static ret (*next)(const char *, type);                                                                       \
+        char shm_[512];                                                                                                \
+        if (!next)                                                                                                     \
+            next = dlsym(RTLD_NEXT, #name);                                                                            \
+        return next(dev_shm(path, shm_), arg);                                                                         \
+    }
+SHM_PATH_WRAP(int, statfs, struct statfs *)
+SHM_PATH_WRAP(int, statfs64, struct statfs64 *)
+SHM_PATH_WRAP(int, statvfs, struct statvfs *)
+SHM_PATH_WRAP(int, statvfs64, struct statvfs64 *)
+
+int unlink(const char *path)
+{
+    static int (*next)(const char *);
+    char shm_[512];
+    if (!next)
+        next = dlsym(RTLD_NEXT, "unlink");
+    return next(dev_shm(path, shm_));
+}
+
+
+// mkstemp family: Chromium names its /dev/shm files through mkostemp, which opens inside glibc (no open() wrapper).
+// The generated name is copied back into the caller's /dev/shm template.
+#define MKSTEMP_WRAP(name, params, args)                                                                              \
+    int name params                                                                                                    \
+    {                                                                                                                  \
+        static int(*next) params;                                                                                      \
+        if (!next)                                                                                                     \
+            next = dlsym(RTLD_NEXT, #name);                                                                            \
+        char shm_[512];                                                                                                \
+        const char *orig = tmpl;                                                                                       \
+        if (dev_shm(orig, shm_) == orig)                                                                               \
+            return next args;                                                                                          \
+        tmpl = shm_;                                                                                                   \
+        int fd = next args;                                                                                            \
+        if (fd >= 0)                                                                                                   \
+            strcpy((char *)orig + 8, shm_ + 9); /* "/tmp/.shm" + rest -> "/dev/shm" + rest */                          \
+        return fd;                                                                                                     \
+    }
+MKSTEMP_WRAP(mkstemp, (char *tmpl), (tmpl))
+MKSTEMP_WRAP(mkstemp64, (char *tmpl), (tmpl))
+MKSTEMP_WRAP(mkostemp, (char *tmpl, int flags), (tmpl, flags))
+MKSTEMP_WRAP(mkostemp64, (char *tmpl, int flags), (tmpl, flags))
 #define OPEN_WRAP(name, ...)                                                                                          \
     int name(const char *path, int flags, ...)                                                                          \
     {                                                                                                                   \
         static int (*next)(const char *, int, ...);                                                                     \
+        char shm_[512];                                                                                                 \
+        path = dev_shm(path, shm_);                                                                                     \
         if (IS_UPTIME(path))                                                                                            \
             return fake_proc_fd(path);                                                                                         \
         if (!next)                                                                                                      \
@@ -435,6 +499,8 @@ OPEN_WRAP(open64)
     int name(int dirfd, const char *path, int flags, ...)                                                               \
     {                                                                                                                   \
         static int (*next)(int, const char *, int, ...);                                                                \
+        char shm_[512];                                                                                                 \
+        path = dev_shm(path, shm_);                                                                                     \
         if (IS_UPTIME(path))                                                                                            \
             return fake_proc_fd(path);                                                                                         \
         if (!next)                                                                                                      \
@@ -454,6 +520,8 @@ OPENAT_WRAP(openat64)
     int name(const char *path, int flags)                                                                               \
     {                                                                                                                   \
         static int (*next)(const char *, int);                                                                          \
+        char shm_[512];                                                                                                 \
+        path = dev_shm(path, shm_);                                                                                     \
         if (IS_UPTIME(path))                                                                                            \
             return fake_proc_fd(path);                                                                                  \
         if (!next)                                                                                                      \
@@ -468,6 +536,8 @@ OPEN2_WRAP(__open64_2)
     int name(int dirfd, const char *path, int flags)                                                                    \
     {                                                                                                                   \
         static int (*next)(int, const char *, int);                                                                     \
+        char shm_[512];                                                                                                 \
+        path = dev_shm(path, shm_);                                                                                     \
         if (IS_UPTIME(path))                                                                                            \
             return fake_proc_fd(path);                                                                                  \
         if (!next)                                                                                                      \
@@ -644,6 +714,7 @@ static int android_blocked(long nr)
     switch (nr) {
     case SYS_shmget: case SYS_shmat: case SYS_shmdt: case SYS_shmctl: case SYS_semget: case SYS_semop:
     case SYS_semtimedop: case SYS_semctl: case SYS_msgget: case SYS_msgsnd: case SYS_msgrcv: case SYS_msgctl:
+    case SYS_io_uring_setup: case SYS_io_uring_enter: case SYS_io_uring_register: // libuv (Node, Electron)
     case SYS_kcmp:
     case SYS_set_robust_list:
     case SYS_rseq:
