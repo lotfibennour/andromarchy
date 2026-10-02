@@ -715,6 +715,8 @@ static int android_blocked(long nr)
     case SYS_shmget: case SYS_shmat: case SYS_shmdt: case SYS_shmctl: case SYS_semget: case SYS_semop:
     case SYS_semtimedop: case SYS_semctl: case SYS_msgget: case SYS_msgsnd: case SYS_msgrcv: case SYS_msgctl:
     case SYS_io_uring_setup: case SYS_io_uring_enter: case SYS_io_uring_register: // libuv (Node, Electron)
+    case SYS_name_to_handle_at: case SYS_open_by_handle_at: // systemd
+    case 452: // fchmodat2 (systemd calls it raw; glibc's own is patched)
     case SYS_kcmp:
     case SYS_set_robust_list:
     case SYS_rseq:
@@ -1403,4 +1405,21 @@ int symlink(const char *target, const char *linkpath)
     if (!next)
         next = dlsym(RTLD_NEXT, "symlink");
     return next(relative_target(target, AT_FDCWD, linkpath, rel), linkpath);
+}
+
+// name_to_handle_at / open_by_handle_at: Android's seccomp kills the process (systemd-detect-virt, systemd-sysusers
+// in pacman hooks: "Bad system call"). EOPNOTSUPP is what a filesystem without handles answers; systemd falls back.
+struct file_handle;
+int name_to_handle_at(int dirfd, const char *path, struct file_handle *h, int *mount_id, int flags)
+{
+    (void)dirfd, (void)path, (void)h, (void)mount_id, (void)flags;
+    errno = EOPNOTSUPP;
+    return -1;
+}
+
+int open_by_handle_at(int mount_fd, struct file_handle *h, int flags)
+{
+    (void)mount_fd, (void)h, (void)flags;
+    errno = EOPNOTSUPP;
+    return -1;
 }

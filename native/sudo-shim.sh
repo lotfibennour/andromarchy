@@ -29,5 +29,10 @@ rm -f "$keyf"
 export FAKEROOTKEY=${key_pid%%:*}
 LD_PRELOAD="$compat:$B/usr/local/lib/libfakeroot.so:${LD_PRELOAD#*:}" "$@"
 rc=$?
-kill "${key_pid##*:}" 2>/dev/null
+# faked writes the whole database when it exits: wait for that, or the next sudo loads a half-written file
+# ("Database load failed", then "sudo: faked failed").
+# ponytail: two sudo running at the same time each save their own view, the last one wins; add a lock if that bites.
+pid=${key_pid##*:}
+kill "$pid" 2>/dev/null
+while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done
 exit $rc
