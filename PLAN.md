@@ -141,7 +141,7 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 
 | # | Étape | Critère de réussite |
 |---|---|---|
-| 4.1 | **Lanceur natif** (NDK) qui remplace `arch-native.sh`/`hypr-native.sh` (variables, chargeur patché, préchargements, `faked` pour le mode root). | Depuis Termux, le lanceur ouvre le `bash` d'Arch et démarre Hyprland comme les scripts. |
+| ✅ 4.1 | **Lanceur natif** (2026-10-02 : [native/launcher/lotfix-run.c](native/launcher/lotfix-run.c), environnement identique au script, NDK 28 API 24, segments alignés 16 Ko, session Hyprland lancée avec) (NDK) qui remplace `arch-native.sh`/`hypr-native.sh` (variables, chargeur patché, préchargements, `faked` pour le mode root). | Depuis Termux, le lanceur ouvre le `bash` d'Arch et démarre Hyprland comme les scripts. |
 | 4.1b | **Audio** : brancher le son d'Anland (PipeWire côté Linux, audio natif de l'appli) sur la session Hyprland. | Une vidéo dans Firefox s'entend, le volume se règle depuis Omarchy. |
 | 4.2 | **Fusion** : appli `org.lotfix` = affichage anland-termux + terminal et service termux-app + démon Anland (NDK) + lanceur ; l'appli s'ouvre sur Omarchy, le terminal reste accessible. | Une seule APK affiche Omarchy, à côté d'un Termux officiel installé. |
 | 4.3 | **Premier lancement** : téléchargement ou import du système Arch, sha256, extraction (droits conservés), `setup-rootfs.sh`, barre de progression. | Appareil vierge : bureau Omarchy sans taper aucune commande. |
