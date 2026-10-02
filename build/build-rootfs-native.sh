@@ -20,8 +20,8 @@ ALARM_URL=http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
 MESA_URL=https://github.com/lfdevs/mesa-for-android-container/releases/download/mesa-26.3.0-devel-20260824/mesa-for-android-container_26.3.0-devel-20260824_archlinux_arm64.tar
 FAKEROOT_URL=https://deb.debian.org/debian/pool/main/f/fakeroot/fakeroot_1.37.1.1.orig.tar.gz
 
-inside_installed() { # runs a command in the installed rootfs, as fake root
-  ARCH_ROOTFS=$R ARCH_ROOT=1 ARCH_EXCLUDE_EXTRA=$RUN XDG_RUNTIME_DIR=$RUN "$LAUNCHER" -c "$1"
+inside_installed() { # runs a command in the installed rootfs (as the app: no fake root for downloads, tar, copies)
+  ARCH_ROOTFS=$R ARCH_EXCLUDE_EXTRA=$RUN XDG_RUNTIME_DIR=$RUN "$LAUNCHER" -c "$1"
 }
 
 echo "== 1/3 inputs, Hyprland, base system (installed rootfs)"
@@ -32,7 +32,7 @@ inside_installed "set -euo pipefail
   curl -fsSL -z mesa.tar -o mesa.tar $MESA_URL
   curl -fsSL -z fakeroot.tar.gz -o fakeroot.tar.gz $FAKEROOT_URL
   # Hyprland + aquamarine with our patches (skipped when already built).
-  [ -f $G/out/lotfix-hyprland-aarch64.tar.zst ] || bash $REPO/build/build-hyprland.sh $REPO/patches $G/out
+  [ -f $G/out/lotfix-hyprland-aarch64.tar.zst ] || sudo bash $REPO/build/build-hyprland.sh $REPO/patches $G/out
   rm -rf $G/rootfs && mkdir -p $G/rootfs
   # Its absolute symlinks mean the new root (android-compat writes them relative to it).
   ANDROID_COMPAT_SYMLINK_ROOT=$G/rootfs tar -xpf alarm.tar.gz -C $G/rootfs
