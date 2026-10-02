@@ -46,6 +46,8 @@ rm -rf /tmp/omarchy
 git clone -q --depth 1 ${OMARCHY_REF:+-b "$OMARCHY_REF"} https://github.com/basecamp/omarchy /tmp/omarchy
 git -C /tmp/omarchy log -1 --format='omarchy %H %cd' > /etc/lotfix-omarchy-version
 bash $L/omarchy/install-omarchy-android.sh /tmp/omarchy
+# systemctl without systemd (user services, Restart=), ahead of systemd's own in /usr/local/bin.
+bash $L/native/install-systemctl.sh
 
 # No-proot runtime, kept in the rootfs so it always matches its glibc: the seccomp-patched loader + libc,
 # and android-compat.so (preloaded into every process by arch-native.sh).

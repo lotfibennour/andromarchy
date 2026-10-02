@@ -161,6 +161,83 @@ int memfd_create(const char *name, unsigned int flags)
     return next(name, flags);
 }
 
+// 3a. /proc/uptime and /proc/stat: SELinux denies them to apps; uptime, htop and systemctl (process ages from the
+//     boot time) need them. Serve them from CLOCK_BOOTTIME in a memfd: uptime with idle 0, stat with a zero "cpu" line
+//     and the real "btime". Every other path passes through.
+// ponytail: no per-CPU times in the fake /proc/stat; CPU meters (htop, top) stay at zero.
+#include <stdarg.h>
+#include <sys/mman.h>
+#include <time.h>
+
+static int fake_proc_fd(const char *path)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_BOOTTIME, &t);
+    char buf[128];
+    int n = strcmp(path, "/proc/uptime") == 0
+                ? snprintf(buf, sizeof buf, "%ld.%02ld 0.00\n", (long)t.tv_sec, t.tv_nsec / 10000000)
+                : snprintf(buf, sizeof buf, "cpu  0 0 0 0 0 0 0 0 0 0\nbtime %ld\n", (long)(time(NULL) - t.tv_sec));
+    int fd = memfd_create("proc", MFD_CLOEXEC);
+    if (fd < 0 || write(fd, buf, n) != n || lseek(fd, 0, SEEK_SET) < 0) {
+        if (fd >= 0)
+            close(fd);
+        errno = EACCES;
+        return -1;
+    }
+    return fd;
+}
+
+#define IS_UPTIME(p) ((p) && (strcmp((p), "/proc/uptime") == 0 || strcmp((p), "/proc/stat") == 0))
+
+#define OPEN_WRAP(name, ...)                                                                                          \
+    int name(const char *path, int flags, ...)                                                                          \
+    {                                                                                                                   \
+        static int (*next)(const char *, int, ...);                                                                     \
+        if (IS_UPTIME(path))                                                                                            \
+            return fake_proc_fd(path);                                                                                         \
+        if (!next)                                                                                                      \
+            next = dlsym(RTLD_NEXT, #name);                                                                             \
+        va_list ap;                                                                                                     \
+        va_start(ap, flags);                                                                                            \
+        mode_t mode = va_arg(ap, mode_t);                                                                               \
+        va_end(ap);                                                                                                     \
+        return next(path, flags, mode);                                                                                 \
+    }
+OPEN_WRAP(open)
+OPEN_WRAP(open64)
+
+#define OPENAT_WRAP(name)                                                                                             \
+    int name(int dirfd, const char *path, int flags, ...)                                                               \
+    {                                                                                                                   \
+        static int (*next)(int, const char *, int, ...);                                                                \
+        if (IS_UPTIME(path))                                                                                            \
+            return fake_proc_fd(path);                                                                                         \
+        if (!next)                                                                                                      \
+            next = dlsym(RTLD_NEXT, #name);                                                                             \
+        va_list ap;                                                                                                     \
+        va_start(ap, flags);                                                                                            \
+        mode_t mode = va_arg(ap, mode_t);                                                                               \
+        va_end(ap);                                                                                                     \
+        return next(dirfd, path, flags, mode);                                                                          \
+    }
+OPENAT_WRAP(openat)
+OPENAT_WRAP(openat64)
+
+#define FOPEN_WRAP(name)                                                                                              \
+    FILE *name(const char *path, const char *mode)                                                                      \
+    {                                                                                                                   \
+        static FILE *(*next)(const char *, const char *);                                                               \
+        if (IS_UPTIME(path)) {                                                                                          \
+            int fd = fake_proc_fd(path);                                                                                       \
+            return fd < 0 ? NULL : fdopen(fd, "r");                                                                     \
+        }                                                                                                               \
+        if (!next)                                                                                                      \
+            next = dlsym(RTLD_NEXT, #name);                                                                             \
+        return next(path, mode);                                                                                        \
+    }
+FOPEN_WRAP(fopen)
+FOPEN_WRAP(fopen64)
+
 // 3b. Hard links: Android's SELinux denies them to apps (EACCES). X servers create their lock file by linking a
 //     temp file into place ("Linking lock file in place failed"). Fall back to an exclusive copy: same "only one
 //     creator wins" guarantee, but a separate inode (later writes to one name do not show in the other).

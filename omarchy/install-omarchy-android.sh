@@ -60,6 +60,12 @@ cp -a "$OMARCHY_PATH"/config/. ~/.config/
 # Omarchy's terminal preference list (foot first).
 cp "$OMARCHY_PATH"/default/xdg-terminal-exec/hyprland-xdg-terminals.list ~/.config/xdg-terminals.list
 
+# No systemd: the systemctl replacement's init loop starts enabled user services and restarts them (Restart=).
+# Started with Hyprland so services get WAYLAND_DISPLAY; skipped if one is still running from a previous session.
+grep -q 'systemctl --user init' ~/.config/hypr/autostart.lua ||
+  printf '\n-- Android/no-systemd: user services (enabled units, Restart=)\no.exec_on_start("pgrep -f \x27pytho[n].*systemctl --user init\x27 >/dev/null || systemctl --user init")\n' >> ~/.config/hypr/autostart.lua
+# (the guard matches the Python process: the sh -c line running it also contains "systemctl --user init")
+
 # kitty: spawn bash directly. Its default (kitten run-shell + shell integration) works only partly without proot.
 grep -q '^shell /usr/bin/bash' ~/.config/kitty/kitty.conf 2>/dev/null ||
   printf '\n# Android/no-proot: spawn bash directly\nshell /usr/bin/bash\n' >> ~/.config/kitty/kitty.conf
