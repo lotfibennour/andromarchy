@@ -485,10 +485,38 @@ char *ttyname(int fd)
     return name;
 }
 
+// 7b. exec of /proc/self/exe: Chromium (Brave...) starts its GPU, network and renderer processes by exec'ing
+//     /proc/self/exe. The kernel's /proc/self/exe is the glibc loader that runs every program here, so the child was
+//     the bare loader ("ld-linux-aarch64.so.1: loader cannot load itself"). Exec the real program instead; fakechroot's
+//     execve then goes through the loader as usual.
+extern char **environ;
+
+static const char *self_exe_target(const char *path)
+{
+    if (path && (strcmp(path, "/proc/self/exe") == 0 || strcmp(path, "/proc/thread-self/exe") == 0)) {
+        const char *p = main_program();
+        if (p)
+            return p;
+    }
+    return path;
+}
+
+int execve(const char *path, char *const argv[], char *const envp[])
+{
+    static int (*next)(const char *, char *const[], char *const[]);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "execve");
+    return next(self_exe_target(path), argv, envp);
+}
+
+int execv(const char *path, char *const argv[])
+{
+    return execve(path, argv, environ);
+}
+
 // 8. execvpe: fakechroot 2.20.1 does not wrap it, so glibc's version issues the execve syscall itself with the guest
 //    path, on Android's filesystem (foot: "bash: failed to execute", or Android's /bin/sh). Search PATH here and go
 //    through execve, which fakechroot wraps (loader + #! handling).
-extern char **environ;
 
 int execvpe(const char *file, char *const argv[], char *const envp[])
 {
