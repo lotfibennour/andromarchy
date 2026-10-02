@@ -299,13 +299,15 @@ public class MainActivity extends Activity
 
         // Andromarchy: this app is also the Linux side. Start the session (daemon, audio, Hyprland) if the Arch
         // rootfs is installed; this activity then connects to the daemon like the Termux version did.
+        if (!SessionService.rootfsReady(this)) { // first launch: setup form, then the rootfs download
+            redirected = true;
+            startActivity(new Intent(this, InstallActivity.class));
+            finish();
+            return;
+        }
         HardwareKeyboard.watch(this); // the on-screen keyboard stays hidden while a physical one is connected
         backlight = Backlight.start(this); // Omarchy's brightness controls -> this window's brightness
-        if (SessionService.rootfsReady(this))
-            SessionService.start(this);
-        else
-            android.widget.Toast.makeText(this, "Arch rootfs missing: " + SessionService.rootfs(this),
-                    android.widget.Toast.LENGTH_LONG).show();
+        SessionService.start(this);
 
         setupMediaAudio();
         applyScreenOrientation();
@@ -914,6 +916,10 @@ public class MainActivity extends Activity
 
     @Override
     protected void onDestroy() {
+        if (redirected) { // only forwarded to InstallActivity: nothing was set up
+            super.onDestroy();
+            return;
+        }
         abandonMediaAudioFocus();
         stopNative();
         if (compatibleReceiverRegistered) {
@@ -2080,6 +2086,7 @@ public class MainActivity extends Activity
 
     // 原有 handleTouchEvent 一字未改
     private LongPress longPress;
+    private boolean redirected; // first launch: handed over to InstallActivity in onCreate
     private Backlight backlight; // a FileObserver must stay referenced, or it stops when collected
 
     private boolean handleTouchEvent(MotionEvent event) {
