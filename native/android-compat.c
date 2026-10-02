@@ -778,7 +778,12 @@ long syscall(long nr, ...)
         a[j] = (long)gs_translate((const char *)a[j], p2);
     if (!next)
         next = dlsym(RTLD_NEXT, "syscall");
-    return next(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+    long r = next(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+    // Raw readlinkat("/proc/self/exe") (Electron's utility processes): the loader otherwise, so VS Code's helpers
+    // looked for icudtl.dat next to ld.so and died. Same answer as the readlink() wrapper.
+    if (nr == SYS_readlinkat && IS_PROC((const char *)a[1]))
+        return fix_proc_link((const char *)a[1], (char *)a[2], (size_t)a[3], r);
+    return r;
 }
 
 // 6. tcgetattr/tcsetattr: recent glibc uses the TCGETS2/TCSETS2 ioctls, which Android's SELinux ioctl allowlist
@@ -868,12 +873,49 @@ static const char *self_exe_target(const char *path)
     return path;
 }
 
+// The runtime lives in the environment (LD_PRELOAD, FAKECHROOT_*...). Programs that start children with a cleaned
+// environment (VS Code's helper processes) dropped it: no fakechroot, no android-compat in the child, which then saw
+// Android's paths (VS Code: "Invalid file descriptor to ICU data", helpers crashed). Put the missing ones back.
+static const char *const runtime_vars[] = {"LD_PRELOAD",       "LD_LIBRARY_PATH", "FAKECHROOT_BASE",
+                                           "FAKECHROOT_ELFLOADER", "FAKECHROOT_EXCLUDE_PATH", "FAKECHROOT",
+                                           "FAKEROOTKEY",      "LOCPATH",         "GCONV_PATH", "TZDIR"};
+#define N_RUNTIME (sizeof runtime_vars / sizeof *runtime_vars)
+static char *runtime_env[N_RUNTIME]; // "NAME=value" snapshots from our own start
+
+__attribute__((constructor)) static void snapshot_runtime_env(void)
+{
+    for (size_t i = 0; i < N_RUNTIME; i++) {
+        const char *v = getenv(runtime_vars[i]);
+        if (v && asprintf(&runtime_env[i], "%s=%s", runtime_vars[i], v) < 0)
+            runtime_env[i] = NULL;
+    }
+}
+
+static int has_var(char *const envp[], const char *name)
+{
+    size_t n = strlen(name);
+    for (int i = 0; envp && envp[i]; i++)
+        if (strncmp(envp[i], name, n) == 0 && envp[i][n] == '=')
+            return 1;
+    return 0;
+}
+
 int execve(const char *path, char *const argv[], char *const envp[])
 {
     static int (*next)(const char *, char *const[], char *const[]);
     if (!next)
         next = dlsym(RTLD_NEXT, "execve");
-    return next(self_exe_target(path), argv, envp);
+    size_t n = 0;
+    while (envp && envp[n])
+        n++;
+    char *env[n + N_RUNTIME + 1];
+    for (size_t i = 0; i < n; i++)
+        env[i] = envp[i];
+    for (size_t i = 0; i < N_RUNTIME; i++)
+        if (runtime_env[i] && !has_var(envp, runtime_vars[i]))
+            env[n++] = runtime_env[i];
+    env[n] = NULL;
+    return next(self_exe_target(path), argv, env);
 }
 
 int execv(const char *path, char *const argv[])
@@ -915,6 +957,11 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
     }
     errno = saw_eacces ? EACCES : ENOENT;
     return -1;
+}
+// glibc's execvp reaches its internal execve directly: route it through ours (env -i, cleaned environments).
+int execvp(const char *file, char *const argv[])
+{
+    return execvpe(file, argv, environ);
 }
 
 // 8b. posix_spawn(p): glibc's clones and calls execve itself, on Android's filesystem and without the loader
