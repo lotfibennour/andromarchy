@@ -8,6 +8,9 @@
     <!-- Andromarchy session (SessionService): foreground service + wake lock, or HyperOS kills it -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- The Linux side (pacman, browsers...): without it Android cuts every socket of the app off the network -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
