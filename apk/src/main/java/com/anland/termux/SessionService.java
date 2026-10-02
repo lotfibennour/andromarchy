@@ -10,6 +10,10 @@ import android.content.BroadcastReceiver;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.BatteryManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.wifi.WifiInfo;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
@@ -82,6 +86,8 @@ public class SessionService extends Service {
 
         // Battery for the session's UPower stand-in (android-upower): apps cannot read /sys/class/power_supply.
         registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        // Active network for the NetworkManager stand-in (android-nm): apps cannot see the interfaces.
+        getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(network);
 
         try {
             startSession();
@@ -117,6 +123,8 @@ public class SessionService extends Service {
         new File(run, "system_bus").delete();
         spawn("system-dbus", List.of(launcher, "-c", "exec dbus-daemon --config-file=/opt/lotfix/system-bus.conf"
                 + " --nofork --nopidfile --address=unix:path=" + new File(run, "system_bus").getPath()), archEnv(run, sock));
+        spawn("android-nm", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/system_bus\" ]"
+                + " && break; sleep 0.1; done; exec android-nm"), archEnv(run, sock));
         spawn("android-upower", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/system_bus\" ]"
                 + " && break; sleep 0.1; done; exec android-upower"), archEnv(run, sock));
 
@@ -144,6 +152,42 @@ public class SessionService extends Service {
         env.remove("WAYLAND_DISPLAY");
         env.remove("DISPLAY");
         return env;
+    }
+
+    /** Android's default network -> run/network ("wifi <strength> <ssid>" | "wired" | "none"), read by android-nm. */
+    private final ConnectivityManager.NetworkCallback network = new ConnectivityManager.NetworkCallback() {
+        @Override
+        public void onCapabilitiesChanged(Network n, NetworkCapabilities caps) {
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                int strength = 0;
+                String ssid = "";
+                if (caps.getTransportInfo() instanceof WifiInfo) {
+                    WifiInfo w = (WifiInfo) caps.getTransportInfo();
+                    strength = Math.max(0, Math.min(100, 2 * (w.getRssi() + 100))); // -100..-50 dBm -> 0..100
+                    ssid = w.getSSID().replace("\"", ""); // redacted without the location permission
+                    if (ssid.startsWith("<"))
+                        ssid = "";
+                }
+                writeState("network", "wifi " + strength + " " + ssid);
+            } else
+                writeState("network", "wired"); // mobile data, USB, Ethernet: Quickshell only knows wired
+        }
+
+        @Override
+        public void onLost(Network n) {
+            writeState("network", "none");
+        }
+    };
+
+    /** Atomic write of one line to run/<name>: the reader never sees half a line. */
+    private void writeState(String name, String line) {
+        File f = new File(runDir(this), name), tmp = new File(runDir(this), "." + name);
+        try (java.io.FileWriter w = new java.io.FileWriter(tmp)) {
+            w.write(line + "\n");
+        } catch (IOException e) {
+            return;
+        }
+        tmp.renameTo(f);
     }
 
     /** Android battery state -> run/battery ("<percent> <charging 0|1>"), read by android-upower. */
@@ -180,6 +224,7 @@ public class SessionService extends Service {
     @Override
     public void onDestroy() {
         unregisterReceiver(battery);
+        getSystemService(ConnectivityManager.class).unregisterNetworkCallback(network);
         for (Process p : processes)
             p.destroy();
         if (wakeLock != null && wakeLock.isHeld())
