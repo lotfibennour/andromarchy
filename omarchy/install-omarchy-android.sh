@@ -66,6 +66,12 @@ grep -q 'systemctl --user init' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/no-systemd: user services (enabled units, Restart=)\no.exec_on_start("pgrep -f \x27pytho[n].*systemctl --user init\x27 >/dev/null || systemctl --user init")\n' >> ~/.config/hypr/autostart.lua
 # (the guard matches the Python process: the sh -c line running it also contains "systemctl --user init")
 
+# Keybinds from virtual keyboards (the on-screen keyboard's wtype): wtype uploads its own keymap, and by default
+# Hyprland decodes binds with the main layout, where wtype's first keycode is Escape (Super+W opened the system
+# menu). Resolve binds with the sending keyboard's own keymap.
+grep -q 'resolve_binds_by_sym' ~/.config/hypr/input.lua ||
+  printf '\n-- Android/Andromarchy: binds from virtual keyboards (on-screen keyboard) use their own keymap\nhl.config({ input = { resolve_binds_by_sym = true } })\n' >> ~/.config/hypr/input.lua
+
 # On-screen keyboard by default (abdxdev/omarchy-onscreen-keyboard, MIT): a bar plugin that types through wtype
 # (Wayland virtual keyboard), so it reaches every app with accents too. Pinned commit.
 OSK_ID=io.github.abdxdev.onscreen-keyboard
