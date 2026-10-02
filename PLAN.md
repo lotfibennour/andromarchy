@@ -152,6 +152,14 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 | 4.8 | **Test grand public.** | Installation → bureau Omarchy en moins de 10 minutes. |
 | 4.9 | **Pont d'état Android** : l'appli lit batterie, réseau, volume et luminosité (API Android, `/sys` étant interdit) et les transmet au système Arch (faux UPower, etc.) ; réglage du volume et de la luminosité via Android. Pas de gestion du Wi-Fi ni du Bluetooth depuis Linux. | La barre d'Omarchy affiche le niveau de batterie et l'état du réseau. |
 
+## Problèmes connus (à corriger plus tard)
+
+| Problème | Ce qu'on sait | Pistes |
+|---|---|---|
+| **Firefox : rendu saccadé, fenêtre qui clignote** (vidéo, défilement, interface) | Propre à Firefox : mpv en GPU est stable. Pas de reconnexion Anland ni de rechargement Hyprland. Image sombre sur une frame (vidéo de l'utilisateur). Inchangé avec `gfx.webrender.compositor=false`. Forcer l'alpha à 1 en sortie (essai de patch 0006) a **aggravé** : retiré. | Synchronisation vsync/frame callbacks de Firefox, `widget.wayland.*`, décodage vidéo, comparer avec un autre navigateur (Chromium). |
+| **Firefox plante sur « Enregistrer le lien sous… »** | Pas de rapport de plantage. | Pas de bus D-Bus de session (sans systemd) : lancer `dbus-daemon --session` avec la session, puis `xdg-desktop-portal(-gtk/-hyprland)`. Relancer Firefox avec sa sortie d'erreurs pour confirmer. |
+| **Audio : démarrage manuel** | Le pont PipeWire marche (son validé), mais PipeWire, WirePlumber et pipewire-pulse ont été lancés à la main. | Les démarrer avec la session (autostart ou services utilisateur), puis commiter le pont audio d'aquamarine (`anland_audio.c`). |
+
 ## Phase 5 : maintenance
 
 | # | Étape | Critère de réussite |
