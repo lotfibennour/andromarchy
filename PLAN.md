@@ -118,18 +118,36 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 
 ## Phase 4 : l'APK unique
 
-**Décision (2026-10-02) :** une seule APK qui fusionne le code de **termux-app** et d'**anland-termux** (GPL-3.0), sous un **nom de paquet propre et court** (`org.lotfix`, limite `sun_path` de 108 octets). Elle **coexiste** avec un Termux officiel déjà installé. On ne garde de Termux que le code Java (service de premier plan, wake-lock, terminal) et une **petite base recompilée** pour `/data/data/org.lotfix/files/usr` : `bash`, `coreutils`, `tar`, `zstd`, `curl`, le démon Anland. Pas de `pkg` dans l'appli : tout le reste passe par `pacman` dans Arch. Termux:API n'est pas pris en charge.
+**Décision (2026-10-02), option C allégée :** une seule APK `org.lotfix` (nom court : limite `sun_path` de 108 octets) qui reprend l'appli d'affichage et le démon d'**anland-termux** et le code Java utile de **termux-app** (vue terminal, service de premier plan, wake-lock), tous GPL-3.0. Elle **coexiste** avec un Termux officiel. **Aucun paquet Termux** : un lanceur natif (NDK) remplace `arch-native.sh`/`hypr-native.sh`, le téléchargement et l'extraction se font en Java, le démon Anland (747 lignes de C sans dépendance) est compilé avec le NDK, et `setup-rootfs.sh` s'exécute avec le `bash` d'Arch. Tout le reste passe par `pacman`.
+
+**Étude 4.0 (faite) :** l'appli d'affichage (`MainActivity`, JNI : Surface, dma-buf, sockets, audio) se connecte au démon par socket Unix ; dans une seule appli, le pont `sharedUserId`/Binder disparaît. Anland-termux contient déjà le **clavier physique dédié** (`KeyInterceptor`, service d'accessibilité) et le **clavier à l'écran** (`SystemIME`, `VirtualKeyboardView`) : 4.5 et 4.6 sont surtout à valider avec Hyprland.
+
+### Limites Android à respecter (Android 16 / API 36 sur l'appareil cible)
+
+| Limite | Conséquence pour l'APK |
+|---|---|
+| **W^X** : une appli avec targetSdk ≥ 29 ne peut pas exécuter de fichiers de son dossier de données | **targetSdk 28**, donc hors Play Store (GitHub/F-Droid) ; risque si Android relève le targetSdk minimal installable (aujourd'hui 24) au-dessus de 28 |
+| **Processus fantômes** (Android 12+) : enfants tués au-delà de 32, ou en arrière-plan | Aide à l'option développeur « Désactiver les restrictions des processus enfants » (déjà désactivée sur la tablette) |
+| **Paramètres restreints** (Android 13+) pour les APK hors store | Guider vers « Autoriser les paramètres restreints » avant d'activer l'accessibilité |
+| **Notifications** (Android 13+) | Demande de `POST_NOTIFICATIONS`, nécessaire au service de premier plan |
+| **Veille, Doze, limites d'arrière-plan** | Service de premier plan + wake-lock ; HyperOS : « Démarrage automatique » et batterie « Aucune restriction » |
+| **seccomp des applis** | glibc patchée (+ hook pacman), `android-compat.so` (accept4, setgid/setuid, kcmp…), interception Go |
+| **SELinux** : pas de liens physiques, pas de `/proc/uptime` ni `/proc/stat`, pas de réouverture d'un memfd par `/proc/self/fd`, pas de `TCGETS2` | Contournements dans `android-compat.so` (copie exclusive, fichiers `/proc` émulés, etc.) |
+| **Pas de `/dev/shm`, ni de DRM** | `shm_open` dans `/tmp/.shm`, memfd ; GPU via KGSL (Snapdragon uniquement) |
+| **umask 077** à l'extraction | Extraction en conservant les droits ; `/tmp` en 1777 (`setup-rootfs.sh`) |
+| **Taille de page** : 4 Ko sur la tablette, 16 Ko sur certains appareils Android 15+ | Bibliothèques NDK de l'APK alignées sur 16 Ko ; binaires Arch : à vérifier sur un appareil 16 Ko |
+| **Raccourcis système HyperOS** (Super, Alt+Tab…) | Service d'accessibilité (`KeyInterceptor`) + désactiver les raccourcis HyperOS concernés |
+| **Redémarrage de l'activité** (rotation, clavier branché) | Reconnexion du backend Anland, rechargement Hyprland à la rotation (patch 0005) |
 
 | # | Étape | Critère de réussite |
 |---|---|---|
-| 4.0 | **Étude** de termux-app et d'anland-termux : où sont l'activité d'affichage, le démon et le pont entre eux ; liste exacte des paquets de la petite base. | Schéma de fusion validé, sans inconnue. |
-| 4.1 | **Petite base recompilée** pour `org.lotfix` (termux-packages, préfixe personnalisé) + démon Anland. | `bash`, `tar`, `zstd`, `curl`, `anland` tournent depuis `/data/data/org.lotfix`. |
-| 4.2 | **Fusion** : fork de termux-app renommé, activité et service d'affichage d'Anland intégrés ; l'appli s'ouvre sur Omarchy, le terminal reste accessible. | Une seule APK affiche Omarchy, à côté d'un Termux officiel installé. |
-| 4.3 | **Premier lancement** : petite base, puis téléchargement ou import du système Arch, sha256, extraction `tar -p`, `setup-rootfs.sh`, avec une barre de progression. | Appareil vierge : bureau Omarchy sans taper aucune commande. |
-| 4.4 | **Cycle de vie et HyperOS** : un service pour Hyprland et Anland, wake-lock, processus fantômes, « Démarrage automatique », batterie sans restriction, veille/réveil. | Session vivante après 1 h en arrière-plan et 10 cycles veille/réveil. |
-| 4.5 | **Clavier physique dédié** : `AccessibilityService` (`flagRequestFilterKeyEvents`) actif seulement au premier plan, `requestPointerCapture()`, aide aux « paramètres restreints ». | Super+Entrée ouvre un terminal, Alt+Tab reste dans Hyprland, clavier normal hors de l'appli. |
-| 4.6 | **Clavier à l'écran** : clavier Android → Hyprland (touches simples, puis accents/emoji via la saisie de texte Wayland). | Taper dans un terminal et dans Firefox sans clavier physique. |
-| 4.7 | **Mises à jour** : hook pacman qui réapplique le patch seccomp de glibc (**à faire tout de suite**, le risque existe déjà) ; mise à jour de l'appli et du système. | `pacman -Syu` avec une nouvelle glibc ne casse rien. |
+| 4.1 | **Lanceur natif** (NDK) qui remplace `arch-native.sh`/`hypr-native.sh` (variables, chargeur patché, préchargements, `faked` pour le mode root). | Depuis Termux, le lanceur ouvre le `bash` d'Arch et démarre Hyprland comme les scripts. |
+| 4.2 | **Fusion** : appli `org.lotfix` = affichage anland-termux + terminal et service termux-app + démon Anland (NDK) + lanceur ; l'appli s'ouvre sur Omarchy, le terminal reste accessible. | Une seule APK affiche Omarchy, à côté d'un Termux officiel installé. |
+| 4.3 | **Premier lancement** : téléchargement ou import du système Arch, sha256, extraction (droits conservés), `setup-rootfs.sh`, barre de progression. | Appareil vierge : bureau Omarchy sans taper aucune commande. |
+| 4.4 | **Cycle de vie et HyperOS** : un service pour Hyprland et Anland, wake-lock, aide aux réglages (processus fantômes, démarrage automatique, batterie, notifications), veille/réveil. | Session vivante après 1 h en arrière-plan et 10 cycles veille/réveil. |
+| 4.5 | **Clavier physique dédié** : valider `KeyInterceptor` avec Hyprland, capture de la souris, aide aux paramètres restreints. | Super+Entrée ouvre un terminal, Alt+Tab reste dans Hyprland, clavier normal hors de l'appli. |
+| 4.6 | **Clavier à l'écran** : valider `SystemIME`/`VirtualKeyboardView` avec Hyprland (accents, emoji). | Taper dans un terminal et dans Firefox sans clavier physique. |
+| 4.7 | **Mises à jour** : ✅ hook pacman qui repatche glibc (2026-10-02, testé) ; mise à jour de l'appli et du système. | `pacman -Syu` avec une nouvelle glibc ne casse rien. |
 | 4.8 | **Test grand public.** | Installation → bureau Omarchy en moins de 10 minutes. |
 
 ## Phase 5 : maintenance
