@@ -91,6 +91,9 @@ grep -q 'systemctl --user init' ~/.config/hypr/autostart.lua ||
 # menu). Resolve binds with the sending keyboard's own keymap.
 grep -q 'resolve_binds_by_sym' ~/.config/hypr/input.lua ||
   printf '\n-- Android/Andromarchy: binds from virtual keyboards (on-screen keyboard) use their own keymap\nhl.config({ input = { resolve_binds_by_sym = true } })\n' >> ~/.config/hypr/input.lua
+# Hyprland is started by the app (SessionService), not start-hyprland: no "launched without start-hyprland" nag.
+grep -q 'disable_watchdog_warning' ~/.config/hypr/input.lua ||
+  printf '\n-- Android/Andromarchy: started by the app (SessionService), not start-hyprland\nhl.config({ misc = { disable_watchdog_warning = true } })\n' >> ~/.config/hypr/input.lua
 
 # On-screen keyboard by default (abdxdev/omarchy-onscreen-keyboard, MIT): a bar plugin that types through wtype
 # (Wayland virtual keyboard), so it reaches every app with accents too. Pinned commit.
