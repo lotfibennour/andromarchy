@@ -171,6 +171,20 @@ public final class SystemIME {
 
     // Map the few Android key codes a soft keyboard delivers as key events to the
     // evdev keycodes KWin expects. Returns 0 for keys we don't forward.
+    // evdev codes of the modifiers held in a soft-keyboard KeyEvent's meta state (none for a modifier key itself).
+    private static final int EVDEV_LEFTSHIFT = 42, EVDEV_LEFTCTRL = 29, EVDEV_LEFTALT = 56;
+
+    private static int[] modifierKeys(KeyEvent event, int evdev) {
+        if (evdev == EVDEV_LEFTSHIFT || evdev == EVDEV_LEFTCTRL || evdev == EVDEV_LEFTALT)
+            return new int[0];
+        int n = 0;
+        int[] mods = new int[3];
+        if (event.isShiftPressed()) mods[n++] = EVDEV_LEFTSHIFT;
+        if (event.isCtrlPressed()) mods[n++] = EVDEV_LEFTCTRL;
+        if (event.isAltPressed()) mods[n++] = EVDEV_LEFTALT;
+        return java.util.Arrays.copyOf(mods, n);
+    }
+
     private static int toEvdevKey(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_ENTER:
@@ -295,10 +309,15 @@ public final class SystemIME {
             if (evdev == 0) {
                 return super.sendKeyEvent(event);
             }
+            // Soft keyboards send symbols as keys with meta state (':' = KEYCODE_SEMICOLON + Shift). The compositor
+            // only sees evdev key presses, so press the modifiers around the key (Andromarchy fix: ':' gave ';').
+            final int[] mods = modifierKeys(event, evdev);
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                for (int m : mods) Native.nativeSendKey(0, m);
                 Native.nativeSendKey(0, evdev);
             } else if (event.getAction() == KeyEvent.ACTION_UP) {
                 Native.nativeSendKey(1, evdev);
+                for (int m : mods) Native.nativeSendKey(1, m);
                 // Keep the mirror consistent with a raw key edit. A backspace pops the
                 // tail; anything else (Enter, Tab, arrows, ...) moves the cursor or
                 // inserts content our tail-only model can't track, so drop the mirror

@@ -35,10 +35,10 @@ index 2dc1ee5..955df28 100644
      class IAllocator {
 diff --git a/include/aquamarine/backend/Anland.hpp b/include/aquamarine/backend/Anland.hpp
 new file mode 100644
-index 0000000..21e94ed
+index 0000000..19b7b13
 --- /dev/null
 +++ b/include/aquamarine/backend/Anland.hpp
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,153 @@
 +#pragma once
 +
 +#include <chrono>
@@ -170,6 +170,7 @@ index 0000000..21e94ed
 +        static void                                             onFallback(void* data);
 +        void                                                    onInputReadable();
 +        void                                                    processInput(const ::InputEvent& ev);
++        void                                                    typeText(const char* text, uint32_t len, uint32_t t);
 +
 +        Hyprutils::Memory::CWeakPointer<CBackend>               backend;
 +        display_ctx*                                            display = nullptr;
@@ -248,10 +249,10 @@ index edc4aff..7d9a985 100644
      if (age)
 diff --git a/src/backend/Anland.cpp b/src/backend/Anland.cpp
 new file mode 100644
-index 0000000..6ced96a
+index 0000000..5cea90a
 --- /dev/null
 +++ b/src/backend/Anland.cpp
-@@ -0,0 +1,586 @@
+@@ -0,0 +1,633 @@
 +#include <aquamarine/backend/Anland.hpp>
 +#include <cstdio>
 +#include <cstdlib>
@@ -586,6 +587,51 @@ index 0000000..6ced96a
 +        processInput(ev);
 +}
 +
++// Text from the Android soft keyboard (committed words, suggestions) arrives as UTF-8, not keys. Type it as key
++// presses on Omarchy's US layout, with Shift when needed.
++// ponytail: ASCII only; accents and emoji need the Wayland input-method / text-input protocols.
++static bool usLayoutKey(char c, uint32_t& code, bool& shift) {
++    struct SRow {
++        const char* plain;
++        const char* shifted;
++        uint32_t    first;
++    };
++    static const SRow rows[] = {
++        {"1234567890-=", "!@#$%^&*()_+", 2}, {"qwertyuiop[]", "QWERTYUIOP{}", 16},
++        {"asdfghjkl;'`", "ASDFGHJKL:\"~", 30}, {"zxcvbnm,./", "ZXCVBNM<>?", 44},
++        {"\\", "|", 43}, {" ", "", 57}, {"\n", "", 28}, {"\t", "", 15},
++    };
++    for (const auto& r : rows) {
++        if (const char* at = strchr(r.plain, c); at && c) {
++            code  = r.first + (uint32_t)(at - r.plain);
++            shift = false;
++            return true;
++        }
++        if (const char* at = strchr(r.shifted, c); at && c) {
++            code  = r.first + (uint32_t)(at - r.shifted);
++            shift = true;
++            return true;
++        }
++    }
++    return false;
++}
++
++void Aquamarine::CAnlandBackend::typeText(const char* text, uint32_t len, uint32_t t) {
++    constexpr uint32_t KEY_LEFTSHIFT = 42;
++    for (uint32_t i = 0; i < len; i++) {
++        uint32_t code  = 0;
++        bool     shift = false;
++        if (!usLayoutKey(text[i], code, shift))
++            continue;
++        if (shift)
++            keyboard->events.key.emit(IKeyboard::SKeyEvent{.timeMs = t, .key = KEY_LEFTSHIFT, .pressed = true});
++        keyboard->events.key.emit(IKeyboard::SKeyEvent{.timeMs = t, .key = code, .pressed = true});
++        keyboard->events.key.emit(IKeyboard::SKeyEvent{.timeMs = t, .key = code, .pressed = false});
++        if (shift)
++            keyboard->events.key.emit(IKeyboard::SKeyEvent{.timeMs = t, .key = KEY_LEFTSHIFT, .pressed = false});
++    }
++}
++
 +void Aquamarine::CAnlandBackend::processInput(const InputEvent& ev) {
 +    const uint32_t t = nowMs();
 +    if (getenv("ANLAND_INPUT_DEBUG"))
@@ -641,11 +687,13 @@ index 0000000..6ced96a
 +            break;
 +        case INPUT_TYPE_CLIPBOARD:
 +        case INPUT_TYPE_TEXT_INPUT: {
-+            // ponytail: clipboard / IME text not wired yet, but the payload must be drained or the stream desyncs.
++            // The payload must always be read, or the stream desyncs. ponytail: clipboard not wired yet.
 +            const uint32_t len = ev.type == INPUT_TYPE_CLIPBOARD ? ev.clipboard.size : ev.text_input.size;
 +            if (len > 0 && len < (16u << 20)) {
-+                std::vector<char> sink(len);
-+                poll_input_event_extend_data(display, sink.data(), len, 5000);
++                std::vector<char> text(len);
++                poll_input_event_extend_data(display, text.data(), len, 5000);
++                if (ev.type == INPUT_TYPE_TEXT_INPUT && keyboard)
++                    typeText(text.data(), len, t);
 +            }
 +            break;
 +        }
