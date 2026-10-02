@@ -6,6 +6,7 @@
 # its access point, saved connection and active connection, and one wired device (mobile data, USB, Ethernet: Quickshell
 # knows no other kind). Read-only: connecting to another network is done in Android.
 import os
+import subprocess
 import uuid
 import warnings
 
@@ -186,7 +187,10 @@ def on_call(c, sender, path, iface, method, params, inv):
         },)))
     elif method == "GetSecrets":
         inv.return_value(GLib.Variant("(a{sa{sv}})", ({},)))
-    else:  # Disconnect, RequestScan: Android owns the radios
+    elif method == "Disconnect":  # Android owns the radios: its Wi-Fi panel instead
+        android_request("wifi-panel")
+        inv.return_value(None)
+    else:  # RequestScan
         inv.return_value(None)
 
 
@@ -194,8 +198,14 @@ def on_get(c, sender, path, iface, prop):
     return props(path, iface).get(prop)
 
 
+def android_request(*args):
+    subprocess.Popen(["android-request", *args])
+
+
 def on_set(c, sender, path, iface, prop, value):
-    return True  # Wi-Fi switch and the like: Android's
+    if prop == "WirelessEnabled":  # Android owns the radio (apps cannot switch it): show its Wi-Fi panel
+        android_request("wifi-panel")
+    return True
 
 
 def register_network_objects():
@@ -211,8 +221,27 @@ def emit_changed(path, iface):
                      GLib.Variant("(sa{sv}as)", (iface, props(path, iface), [])))
 
 
+DNS_FILE = os.path.join(os.environ["XDG_RUNTIME_DIR"], "dns")
+dns_seen = None
+
+
+def follow_dhcp_dns():  # resolv.conf on "DHCP" (omarchy-dns) follows the DNS of Android's current network
+    global dns_seen
+    try:
+        with open(DNS_FILE) as f:
+            dns = f.read()
+        with open("/etc/resolv.conf") as f:
+            dhcp = "# andromarchy-dns: DHCP" in f.read()
+    except OSError:
+        return
+    if dns != dns_seen and dhcp:
+        subprocess.run(["omarchy-dns", "DHCP"])
+    dns_seen = dns
+
+
 def update():
     global gen
+    follow_dhcp_dns()
     old = (kind, strength, ssid)
     read_state()
     if (kind, strength, ssid) == old:

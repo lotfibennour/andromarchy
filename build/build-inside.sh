@@ -73,6 +73,8 @@ install -m 755 $L/native/udevadm-shim.sh /usr/local/bin/udevadm
 install -m 644 $L/native/system-bus.conf /opt/lotfix/system-bus.conf
 install -m 755 $L/native/android-upower.py /usr/local/bin/android-upower
 install -m 755 $L/native/android-nm.py /usr/local/bin/android-nm
+# Linux -> Android requests (Wi-Fi panel, launching Android apps): the app watches run/android-request.
+install -m 755 $L/native/android-request.sh /usr/local/bin/android-request
 # Edit menu on a long touch press (the app writes to run/longpress).
 install -m 755 $L/native/longpress-menu.sh /usr/local/bin/andromarchy-longpress
 curl -fsSL -o /tmp/yay.tgz https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_aarch64.tar.gz

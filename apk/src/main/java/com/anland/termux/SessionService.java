@@ -88,6 +88,9 @@ public class SessionService extends Service {
         registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         // Active network for the NetworkManager stand-in (android-nm): apps cannot see the interfaces.
         getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(network);
+        // Requests from Linux for Android-only actions (Wi-Fi panel, launching Android apps).
+        requests = new AndroidRequests(this, runDir(this));
+        requests.startWatching();
 
         try {
             startSession();
@@ -155,7 +158,17 @@ public class SessionService extends Service {
     }
 
     /** Android's default network -> run/network ("wifi <strength> <ssid>" | "wired" | "none"), read by android-nm. */
+    private AndroidRequests requests;
+
     private final ConnectivityManager.NetworkCallback network = new ConnectivityManager.NetworkCallback() {
+        @Override
+        public void onLinkPropertiesChanged(Network n, android.net.LinkProperties lp) {
+            StringBuilder dns = new StringBuilder(); // for omarchy-dns "DHCP": the network's own DNS servers
+            for (java.net.InetAddress a : lp.getDnsServers())
+                dns.append(dns.length() > 0 ? " " : "").append(a.getHostAddress());
+            writeState("dns", dns.toString());
+        }
+
         @Override
         public void onCapabilitiesChanged(Network n, NetworkCapabilities caps) {
             if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
@@ -225,6 +238,7 @@ public class SessionService extends Service {
     public void onDestroy() {
         unregisterReceiver(battery);
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(network);
+        requests.stopWatching();
         for (Process p : processes)
             p.destroy();
         if (wakeLock != null && wakeLock.isHeld())

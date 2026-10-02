@@ -74,6 +74,11 @@ EOF
 chmod 755 /usr/local/bin/systemd-run
 chmod +x /usr/local/bin/systemd-cat
 
+# DNS provider (network panel): no NetworkManager/systemd-resolved here; the rootfs's /etc/resolv.conf is written
+# directly (native/omarchy-dns-android.sh). Omarchy's own kept as omarchy-dns.orig.
+cp -a "$OMARCHY_PATH/bin/omarchy-dns" "$OMARCHY_PATH/bin/omarchy-dns.orig"
+install -m 755 "$(dirname "$0")/../native/omarchy-dns-android.sh" "$OMARCHY_PATH/bin/omarchy-dns"
+
 # User config, same layout as Omarchy's install (config/ -> ~/.config).
 mkdir -p ~/.config
 cp -a "$OMARCHY_PATH"/config/. ~/.config/
