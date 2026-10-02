@@ -24,6 +24,8 @@ inside_installed() { # runs a command in the installed rootfs (as the app: no fa
   ARCH_ROOTFS=$R ARCH_EXCLUDE_EXTRA=$RUN XDG_RUNTIME_DIR=$RUN "$LAUNCHER" -c "$1"
 }
 
+# RESUME=1: keep the new rootfs as it is and rerun build-inside.sh on it (its steps are idempotent).
+if [ -n "${RESUME:-}" ]; then echo "== resuming: phase 1 skipped"; else
 echo "== 1/3 inputs, Hyprland, base system (installed rootfs)"
 inside_installed "set -euo pipefail
   mkdir -p $G/dl $G/out
@@ -51,6 +53,8 @@ inside_installed "set -euo pipefail
   cp mesa.tar fakeroot.tar.gz $G/out/lotfix-hyprland-aarch64.tar.zst $G/rootfs/tmp/lotfix/
   rm -f $G/rootfs/etc/resolv.conf # a link to systemd-resolved's stub, absent here
   printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > $G/rootfs/etc/resolv.conf"
+
+fi
 
 echo "== 2/3 build-inside.sh (new rootfs, native)"
 ARCH_ROOTFS=$N ARCH_ROOT=1 ARCH_EXCLUDE_EXTRA=$RUN XDG_RUNTIME_DIR=$RUN "$LAUNCHER" \

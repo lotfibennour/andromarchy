@@ -78,12 +78,14 @@ install -m 755 $L/native/bwrap-shim.sh /usr/local/bin/bwrap
 install -m 755 $L/native/pkexec-shim.sh /usr/local/bin/pkexec
 
 # Browser: Brave Origin (AUR binary release, aarch64), instead of Firefox. makepkg refuses to run as root:
-# - native (fake root): run it without the fake root (the real app uid underneath), deps through the sudo shim;
+# - native (fake root): its dependencies installed here (we are root), then makepkg without the fake root (the
+#   real app uid underneath) and without -s (no sudo needed);
 # - PC chroot (real root): a throwaway user.
 rm -rf /tmp/brave && git clone -q https://aur.archlinux.org/brave-origin-bin.git /tmp/brave
 if [ -n "${LOTFIX_NATIVE:-}" ]; then
+  pacman -S --noconfirm --needed $(cd /tmp/brave && source ./PKGBUILD && echo "${depends[@]}")
   (cd /tmp/brave && env -u FAKEROOTKEY LD_PRELOAD="$(printf '%s' "$LD_PRELOAD" | tr ':' '\n' | grep -v libfakeroot.so |
-    paste -sd:)" makepkg --noconfirm -s 2>&1 | tail -3)
+    paste -sd:)" makepkg --noconfirm 2>&1 | tail -3)
 else
   useradd -m aurbuild 2>/dev/null || true
   chown -R aurbuild /tmp/brave
