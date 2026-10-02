@@ -1,5 +1,6 @@
 #!/bin/bash
-# Runs inside the aarch64 rootfs (chroot + qemu), called by build-rootfs.sh. Inputs in /tmp/lotfix.
+# Runs inside the aarch64 rootfs, called by build-rootfs.sh (PC: chroot + qemu) or build-rootfs-native.sh (on the
+# tablet: through our own runtime as fake root, LOTFIX_NATIVE=1, no chroot/qemu/proot). Inputs in /tmp/lotfix.
 set -euo pipefail
 L=/tmp/lotfix
 C=/etc/pacman.conf
@@ -19,6 +20,12 @@ pacman-key --populate archlinuxarm
 # Android runs its own kernel: drop the kernel, firmware and initramfs tooling (over 1 GB).
 pacman -Rdd --noconfirm linux-aarch64 $(pacman -Qq | grep -E '^linux-firmware') mkinitcpio 2>/dev/null || true
 pacman -Syu --noconfirm
+if [ -n "${LOTFIX_NATIVE:-}" ]; then
+  # Native: the running loader + libc are the patched copies in /opt/lotfix/arch-glibc, refreshed now from the
+  # glibc just installed (the pacman hook doing it on later upgrades is installed below).
+  pacman -S --noconfirm --needed python
+  python3 $L/native/patch-glibc-syscalls.py /usr/lib /opt/lotfix/arch-glibc
+fi
 # Mesa with the KGSL backend (Adreno without /dev/dri), from lfdevs/mesa-for-android-container. First: with Arch's
 # mesa in IgnorePkg, pacman would otherwise satisfy GL dependencies with mesa-amber, which conflicts with it.
 mkdir -p /tmp/mesa && tar -xf $L/mesa.tar -C /tmp/mesa
@@ -41,12 +48,6 @@ tar -xf $L/lotfix-hyprland-aarch64.tar.zst -C /
 # Only now: ignored earlier, pacman could not resolve them as hyprland dependencies.
 grep -q '^IgnorePkg.*hyprland' $C || sed -i "/^IgnorePkg/ s/$/ aquamarine hyprland/" $C
 
-# Browser: Brave Origin (AUR binary release, aarch64), instead of Firefox. makepkg refuses root: a throwaway user.
-useradd -m aurbuild 2>/dev/null || true
-rm -rf /tmp/brave && runuser -u aurbuild -- git clone -q https://aur.archlinux.org/brave-origin-bin.git /tmp/brave &&
-  (cd /tmp/brave && runuser -u aurbuild -- makepkg --noconfirm -s 2>&1 | tail -3) &&
-  pacman -U --noconfirm /tmp/brave/brave-origin-bin-*.pkg.tar.*
-rm -rf /tmp/brave; userdel -r aurbuild 2>/dev/null || true
 
 # Omarchy.
 rm -rf /tmp/omarchy
@@ -74,6 +75,23 @@ install -m 755 $L/native/sudo-shim.sh /usr/local/bin/sudo
 install -m 755 $L/native/bwrap-shim.sh /usr/local/bin/bwrap
 # pkexec (polkit, setuid) -> the same fake root as sudo.
 install -m 755 $L/native/pkexec-shim.sh /usr/local/bin/pkexec
+
+# Browser: Brave Origin (AUR binary release, aarch64), instead of Firefox. makepkg refuses to run as root:
+# - native (fake root): run it without the fake root (the real app uid underneath), deps through the sudo shim;
+# - PC chroot (real root): a throwaway user.
+rm -rf /tmp/brave && git clone -q https://aur.archlinux.org/brave-origin-bin.git /tmp/brave
+if [ -n "${LOTFIX_NATIVE:-}" ]; then
+  (cd /tmp/brave && env -u FAKEROOTKEY LD_PRELOAD="$(printf '%s' "$LD_PRELOAD" | tr ':' '\n' | grep -v libfakeroot.so |
+    paste -sd:)" makepkg --noconfirm -s 2>&1 | tail -3)
+else
+  useradd -m aurbuild 2>/dev/null || true
+  chown -R aurbuild /tmp/brave
+  (cd /tmp/brave && runuser -u aurbuild -- makepkg --noconfirm -s 2>&1 | tail -3)
+  userdel -r aurbuild 2>/dev/null || true
+fi
+pacman -U --noconfirm /tmp/brave/brave-origin-bin-*.pkg.tar.*
+rm -rf /tmp/brave
+xdg-settings set default-web-browser brave-origin.desktop || true # Omarchy's install ran before it existed
 # No udev daemon on Android: udevadm control/trigger/settle succeed as no-ops.
 install -m 755 $L/native/udevadm-shim.sh /usr/local/bin/udevadm
 # The session's own system bus (SessionService) and the UPower stand-in it carries (battery from Android).

@@ -1416,6 +1416,13 @@ static const char *relative_target(const char *target, int dirfd, const char *li
         return target;
     if (guest_dir_of(dirfd, linkpath, dir, sizeof dir) < 0)
         return target;
+    // Unpacking another system into a subdirectory (build-rootfs-native.sh): its absolute links mean ITS root.
+    const char *sub = getenv("ANDROID_COMPAT_SYMLINK_ROOT");
+    size_t sl = sub ? strlen(sub) : 0;
+    if (sl && strncmp(dir, sub, sl) == 0 && (dir[sl] == '/' || !dir[sl]) && sl + strlen(t) < sizeof t) {
+        memmove(t + sl, t, strlen(t) + 1);
+        memcpy(t, sub, sl);
+    }
     // Common leading components of dir and t, then one ".." per remaining dir component.
     const char *a = dir, *b = t;
     const char *la = a, *lb = b;
