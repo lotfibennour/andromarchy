@@ -66,6 +66,10 @@ final class AndroidRequests extends FileObserver {
             if (intent != null && req[0].equals("split"))
                 intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         }
+        if (req[0].equals("power") && req.length == 2) { // Omarchy's shutdown / reboot / log out / suspend
+            Restarter.power(ctx, req[1].trim());
+            return;
+        }
         android.os.Bundle options = null;
         if (req[0].equals("float") && req.length == 2) {
             intent = ctx.getPackageManager().getLaunchIntentForPackage(req[1].trim());

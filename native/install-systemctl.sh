@@ -8,6 +8,7 @@ URL=https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/$V/f
 SUM_SYSTEMCTL=5f5a47f321c7a8881dfd01f774106dc4012d664bee238eada86a7112674fea93
 SUM_JOURNALCTL=16a52fe484d7c0fca464c82a56de58980440362942482c0d1fbc424e69f8f833
 D=${DEST:-}/usr/local/bin
+X=${DEST:-}/usr/local/libexec
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 
@@ -26,6 +27,9 @@ sed -i 's/^                        elif not os.listdir(filepath):$/             
 grep -q 'delay = conf.get(section, "RestartSec", default or strE(DefaultRestartSec))' "$T/systemctl"
 sed -i 's/delay = conf.get(section, "RestartSec", default or strE(DefaultRestartSec))/delay = conf.get(section, "RestartSec", default or "100ms")/' "$T/systemctl"
 
-mkdir -p "$D"
-install -m 755 "$T/systemctl" "$T/journalctl" "$D/"
+mkdir -p "$D" "$X"
+# systemctl itself is a wrapper (native/systemctl-wrapper.sh): power verbs go to the app.
+install -m 755 "$T/systemctl" "$X/systemctl"
+install -m 755 "$T/journalctl" "$D/"
+install -m 755 "$(dirname "$0")/systemctl-wrapper.sh" "$D/systemctl"
 echo "systemctl replacement $V installed in $D"

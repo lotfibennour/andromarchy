@@ -87,6 +87,8 @@ install -m 755 $L/native/first-boot.sh /opt/lotfix/first-boot.sh
 install -m 755 $L/native/first-session.sh /opt/lotfix/first-session.sh
 # Edit menu on a long touch press (the app writes to run/longpress).
 install -m 755 $L/native/longpress-menu.sh /usr/local/bin/andromarchy-longpress
+# No uwsm: "uwsm stop" (log out) -> a fresh session through the app.
+install -m 755 $L/native/uwsm-shim.sh /usr/local/bin/uwsm
 curl -fsSL -o /tmp/yay.tgz https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_aarch64.tar.gz
 echo "75bc500c8677d6760f51117ae0a61689e9cf165bea3c4800825a5c879d030726  /tmp/yay.tgz" | sha256sum -c --quiet
 tar xzf /tmp/yay.tgz -C /tmp && install -m 755 /tmp/yay_13.0.1_aarch64/yay /usr/local/bin/yay && rm -rf /tmp/yay*
