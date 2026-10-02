@@ -1,0 +1,68 @@
+// Andromarchy: Omarchy (Arch Linux ARM + Hyprland) on Android in one APK, without root or proot.
+// Base: lfdevs/anland-termux's display app (GPL-3.0, see LICENSE-anland-termux / UPSTREAM-anland-termux.txt), run
+// as its own app: the Anland daemon and the Arch launcher are built with the NDK and shipped as native libraries.
+plugins {
+    id "com.android.application" version "9.4.0"
+}
+
+android {
+    namespace = "com.anland.termux" // Java package of the imported code, kept to limit the diff with upstream
+    compileSdk = 36
+
+    buildFeatures {
+        buildConfig = true
+        aidl = true
+    }
+
+    defaultConfig {
+        applicationId = "andro.marchy" // short: the app's files path ends up in 108-byte Unix socket paths
+        // targetSdk 28: Android only lets apps targeting <= 28 execute files from their own data dir (W^X), which
+        // running the Arch rootfs needs. Hence distribution outside the Play Store.
+        // Android 11+: the Anland native code needs API 30 (memfd_create). minSdk above targetSdk only draws a
+        // Gradle warning; Android installs and runs such apps.
+        minSdk = 30
+        targetSdk = 28
+        versionCode = 1
+        versionName = "0.1.0"
+        // The imported code also has a "compatible" transport (Binder bridge from a separate Termux); here the
+        // daemon runs in this app, so the display connects to its socket directly.
+        buildConfigField "boolean", "COMPATIBLE", "false"
+
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+
+        externalNativeBuild {
+            cmake {
+                // The Anland native code uses memfd_create, declared by bionic from API 30 (Android 11).
+                arguments "-DANDROID_STL=none", "-DANDROID_PLATFORM=android-30"
+            }
+        }
+    }
+
+    ndkVersion = "28.2.13676358"
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/jni/CMakeLists.txt")
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Extracted to nativeLibraryDir, which is executable: the daemon and the launcher run from there.
+            useLegacyPackaging = true
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+        }
+    }
+
+    lint {
+        // Imported code calls API 30+ methods behind runtime checks; targetSdk 28 is deliberate (see above).
+        abortOnError = false
+    }
+}

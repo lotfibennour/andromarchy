@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_short_label">Settings</string>
+
+    <!-- Titles / section headers -->
+    <string name="settings_title">Settings</string>
+    <string name="section_virtual_keyboard">Virtual Keyboard Key</string>
+    <string name="section_extra_keys">Extra Keys Bar</string>
+    <string name="section_custom_layout">Custom Extra Keys Layout</string>
+    <string name="section_touchpad">Touchpad Settings</string>
+    <string name="section_connection">Connection</string>
+    <string name="section_display">Display</string>
+    <string name="section_resolution">Display Resolution</string>
+    <string name="section_screen_orientation">Screen Orientation</string>
+    <string name="section_notification">Settings Notification</string>
+    <string name="section_user_actions">Response to user actions</string>
+
+    <!-- Settings home: category rows and back navigation -->
+    <string name="nav_back">‹ Back</string>
+    <string name="cat_keyboard_title">Keyboard &amp; Keys</string>
+    <string name="cat_keyboard_subtitle">Key binding, accessibility &amp; extra keys bar</string>
+    <string name="cat_touchpad_title">Touchpad &amp; Mouse</string>
+    <string name="cat_touchpad_subtitle">Touchpad mode, pointer capture &amp; sensitivity</string>
+    <string name="cat_connection_subtitle">Socket, root, mic, camera &amp; audio latency</string>
+    <string name="cat_display_subtitle">Resolution, screen orientation, display cutout &amp; PIP</string>
+    <string name="cat_general_title">General</string>
+    <string name="cat_general_subtitle">Notification and user actions</string>
+
+    <!-- Bind key -->
+    <string name="bind_key_button">Bind Virtual Keyboard Key</string>
+    <string name="raise_desktop_for_soft_keyboard">Raise desktop when soft keyboard opens</string>
+    <string name="raise_desktop_for_soft_keyboard_hint">When on, the desktop shrinks and moves up so you can see what you type.</string>
+    <string name="listening_countdown">Listening… (%1$ds)</string>
+    <string name="status_current_none">Current: None</string>
+    <string name="status_current">Current: %1$s</string>
+    <string name="keycode_unknown">Keycode %1$d</string>
+
+    <!-- Accessibility -->
+    <string name="accessibility_switch">Accessibility Key Interception</string>
+    <string name="accessibility_hint">Intercept function keys (Fn, F1-F12 etc.) via AccessibilityService and convert tablet-keyboard Back/Browser Back to ESC. Enable this if external keyboard Fn combos or ESC don\'t reach the desktop correctly. Requires Accessibility permission granted in system Settings &gt; Accessibility (one-time).</string>
+
+    <!-- Extra keys bar -->
+    <string name="extra_keys_switch">Extra Keys Bar (special keys)</string>
+    <string name="extra_keys_hint">Show a Termux-style bottom bar with ESC/TAB/CTRL/ALT/arrows/PgUp etc. The display area shrinks to make room; the bar rises together with the soft keyboard. Takes effect on next return to the desktop view.</string>
+    <string name="auto_show_switch">Auto-show extra keys with keyboard</string>
+    <string name="auto_show_hint">When ON, the extra keys bar follows the soft keyboard. When OFF, keyboard visibility does not change the bar; toggle it manually in Settings or with a configured user action.</string>
+
+    <!-- Custom layout editor -->
+    <string name="btn_load_default">Load default template</string>
+    <string name="btn_load_file">Load from file…</string>
+    <string name="layout_hint">Define the extra-keys bar as JSON: \"rows\" is an array of rows, each an array of keys. A key has a \"label\" and a \"type\" (key/text/modifier/keyboard/vkeyboard/settings). \"key\"/\"modifier\" take an evdev \"code\"; \"text\" takes \"text\"; any key may add \"repeat\":true or a nested \"popup\". Invalid JSON falls back to the default. Takes effect on next return to the desktop.</string>
+    <string name="layout_status_default">Using built-in default layout</string>
+    <string name="layout_status_valid">✓ Valid layout</string>
+    <string name="layout_status_invalid">✗ %1$s</string>
+
+    <!-- Touchpad -->
+    <string name="touchpad_mode_switch">Touchpad Mode (relative movement)</string>
+    <string name="touchpad_hint">ON: finger slides move mouse cursor (relative). OFF: touch maps directly to screen (absolute).</string>
+    <string name="mouse_sensitivity_label">Mouse Sensitivity (Acceleration)</string>
+    <string name="mouse_accel_value">%1$.1fx</string>
+    <string name="pointer_capture_switch">Capture external pointer devices when possible</string>
+    <string name="pointer_capture_hint">Intercept hardware pointer events after clicking the desktop view. Press Escape to return pointer control to Android.</string>
+    <string name="transform_captured_pointer_label">Transform captured pointer movements</string>
+    <string name="captured_pointer_speed_label">Captured pointer speed factor, %</string>
+    <string name="captured_pointer_speed_value">%1$d%%</string>
+    <string name="scroll_reverse_switch">Reverse captured touchpad scrolling</string>
+    <string name="scroll_reverse_hint">ON: content follows your fingers ("natural" scrolling). Applies to two-finger scrolling on captured hardware touchpads.</string>
+    <string name="scroll_speed_label">Two-finger scroll speed</string>
+    <string name="scroll_speed_value">%1$.2f</string>
+    <string name="threshold_factor_value">%1$.2f× touch slop</string>
+    <string name="scroll_threshold_label">Scroll detection threshold</string>
+    <string name="scroll_threshold_hint">How far a finger must travel before it counts as moving. Lower this if a pinch is being treated as a scroll.</string>
+    <string name="move_threshold_label">Gesture commit threshold</string>
+    <string name="move_threshold_hint">How far the leading finger must travel before an ambiguous two-finger gesture is resolved. Lower this if scrolling is slow to engage.</string>
+    <string name="gesture_scale_label">Gesture magnitude</string>
+    <string name="gesture_scale_value">%1$.0f px</string>
+    <string name="gesture_scale_hint">Gestures forwarded as touch (pinch, three or more fingers) are mapped into a square of this size centred on the pointer. Larger values make the same finger movement travel further.</string>
+
+    <!-- Connection -->
+    <string name="socket_path_label">Daemon socket path</string>
+    <string name="root_switch">Connect with root (helper)</string>
+    <string name="root_hint">Launches a root helper (su) that connects to the socket and passes the connection back to the app. Takes effect on next connect (reopen the app).</string>
+    <string name="mic_switch">Forward microphone to desktop</string>
+    <string name="mic_hint">Desktop audio always plays through this device\'s speaker. Enabling this also sends the mic the other way. Takes effect on next connect (reopen the app).</string>
+    <string name="camera_switch">Forward camera to desktop</string>
+    <string name="camera_hint">Lets the desktop open this device\'s camera(s) as a video source. The camera only turns on while the desktop is actively recording. Takes effect on next return to the app; first use prompts for the camera permission.</string>
+    <string name="audio_keepalive_switch">Audio keep-alive</string>
+    <string name="audio_keepalive_hint">Keep the audio output stream running so short Linux sounds (volume ticks, key clicks) always play instantly. Costs a little standby power. Off: the audio path sleeps after ~1.5 s of desktop silence and wakes for the next sound. If the audible latency does not match your preference, you may need to tune the Audio latency presets below.</string>
+    <string name="audio_latency_title">Audio latency</string>
+    <string name="latency_speaker_label">Speaker (desktop → phone)</string>
+    <string name="latency_mic_label">Microphone (phone → desktop)</string>
+    <string name="latency_hint">Lower presets cut latency but can cause crackles/dropouts on a busy device. Applies when you return to the desktop view.</string>
+
+    <!-- Resolution -->
+    <string name="width_hint">Width (e.g. 1920)</string>
+    <string name="height_hint">Height (e.g. 1080)</string>
+    <string name="resolution_hint">Pick a preset or enter values manually. Leave 0 for native resolution. \"Screen ×\" scales this device\'s panel (landscape). Takes effect on next connect.</string>
+
+    <string name="screen_orientation_hint">Controls the desktop view orientation. Takes effect when you return to the desktop.</string>
+    <string name="display_cutout_mode_label">Display cutout handling</string>
+    <string name="pip_mode_switch">PIP mode</string>
+    <string name="pip_mode_hint">Show the app in picture-in-picture mode when the Home or Recents button is pressed. Enable with caution. It may result in an odd screen width or height, causing the desktop to show a black screen or crash.</string>
+
+    <!-- Settings notification -->
+    <string name="notification_switch">Show settings notification</string>
+    <string name="notification_hint">Shows a persistent notification while the app is open. Its tap and button responses are configured below. Turning this off hides the notification. Takes effect on next return to the app.</string>
+    <string name="notification_channel_name">Anland Termux</string>
+    <string name="notification_channel_desc">Anland quick access</string>
+    <string name="notification_title">Anland Termux</string>
+    <string name="notification_text">Tap or pull down for configured actions</string>
+
+    <!-- User actions -->
+    <string name="user_action_volume_up">Volume up</string>
+    <string name="user_action_volume_down">Volume down</string>
+    <string name="user_action_back_button">Back button</string>
+    <string name="user_action_notification_tap">Notification tap</string>
+    <string name="user_action_notification_first_button">Notification first button</string>
+    <string name="user_action_notification_second_button">Notification second button</string>
+    <string name="user_action_media_keys">Media keys</string>
+    <string name="user_response_no_action">No action</string>
+    <string name="user_response_toggle_soft_keyboard">Toggle soft keyboard</string>
+    <string name="user_response_toggle_additional_key_bar">Toggle additional key bar</string>
+    <string name="user_response_open_preferences">Open preferences</string>
+    <string name="user_response_release_captures">Release pointer and keyboard capture</string>
+    <string name="user_response_restart_activity">Restart activity</string>
+    <string name="user_response_exit">Exit</string>
+    <string name="user_response_toggle_touchpad_mode">Toggle touchpad mode</string>
+    <string name="user_response_toggle_screen_orientation">Toggle screen orientation</string>
+    <string name="user_response_send_volume_up">Send volume up</string>
+    <string name="user_response_send_volume_down">Send volume down</string>
+    <string name="user_response_send_media_action">Send media action</string>
+    <string name="notification_action_preferences">Preferences</string>
+    <string name="notification_action_exit">Exit</string>
+    <string name="notification_action_restart">Restart</string>
+    <string name="notification_action_toggle_ime">Toggle IME</string>
+    <string name="notification_action_toggle_extra_keys">Toggle extra keys</string>
+    <string name="notification_action_release_captures">Release captures</string>
+    <string name="notification_action_touchpad_mode">Touchpad mode</string>
+    <string name="notification_action_screen_orientation">Screen orientation</string>
+
+    <!-- Toasts -->
+    <string name="toast_no_picker">No file picker available</string>
+    <string name="toast_read_failed">Could not read file</string>
+    <string name="toast_touchpad_mode_relative">Touchpad mode switched to relative</string>
+    <string name="toast_touchpad_mode_absolute">Touchpad mode switched to absolute</string>
+    <string name="toast_screen_orientation">Screen orientation switched to %1$s</string>
+
+    <!-- Hardware key names -->
+    <string name="key_volume_up">Volume Up</string>
+    <string name="key_volume_down">Volume Down</string>
+    <string name="key_volume_mute">Volume Mute</string>
+    <string name="key_power">Power</string>
+    <string name="key_camera">Camera</string>
+    <string name="key_headset_hook">Headset Hook</string>
+    <string name="key_media_play_pause">Media Play/Pause</string>
+    <string name="key_media_next">Media Next</string>
+    <string name="key_media_previous">Media Previous</string>
+    <string name="key_brightness_up">Brightness Up</string>
+    <string name="key_brightness_down">Brightness Down</string>
+    <string name="key_home">Home</string>
+    <string name="key_back">Back</string>
+
+    <!-- Audio latency presets -->
+    <string-array name="latency_labels">
+        <item>Auto (engine default)</item>
+        <item>Ultra Low (~1 ms)</item>
+        <item>Low (~3 ms)</item>
+        <item>Balanced (~5 ms)</item>
+        <item>Safe (~10 ms)</item>
+        <item>Relaxed (~20 ms)</item>
+    </string-array>
+
+    <!-- Resolution presets -->
+    <string-array name="res_preset_labels">
+        <item>Preset…</item>
+        <item>Auto (0×0, native)</item>
+        <item>4K (3840×2160)</item>
+        <item>2K (2560×1440)</item>
+        <item>1080p (1920×1080)</item>
+        <item>720p (1280×720)</item>
+        <item>480p (854×480)</item>
+        <item>Screen × 1.0</item>
+        <item>Screen × 0.8</item>
+        <item>Screen × 0.75</item>
+        <item>Screen × 0.5</item>
+        <item>Screen × 0.25</item>
+    </string-array>
+
+    <string-array name="screen_orientation_labels">
+        <item>Auto</item>
+        <item>Portrait</item>
+        <item>Landscape</item>
+        <item>Reverse portrait</item>
+        <item>Reverse landscape</item>
+    </string-array>
+
+    <string-array name="display_cutout_mode_labels">
+        <item>Draw under all cutouts</item>
+        <item>Draw under rounded corners only</item>
+        <item>Draw under notch/punch hole only</item>
+        <item>Avoid all cutouts</item>
+    </string-array>
+
+    <string-array name="captured_pointer_transform_labels">
+        <item>No</item>
+        <item>Clockwise</item>
+        <item>Counter clockwise</item>
+        <item>Upside down</item>
+        <item>Automatic (for touchpad)</item>
+    </string-array>
+</resources>

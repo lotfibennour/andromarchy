@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="settings_background">#121212</color>
+    <color name="settings_dropdown_background">#2A2A2A</color>
+    <color name="settings_text_primary">#FFFFFFFF</color>
+    <color name="settings_text_secondary">#B3FFFFFF</color>
+    <color name="settings_accent">#90CAF9</color>
+    <color name="settings_divider">#3A3A3A</color>
+    <color name="settings_success">#81C784</color>
+    <color name="settings_error">#EF9A9A</color>
+</resources>

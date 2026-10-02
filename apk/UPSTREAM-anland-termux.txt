@@ -1,0 +1,2 @@
+a70879f059a2e8439fdb132195c3dd10d4810106 Sat Sep 12 09:34:52 2026 +0800
+lfdevs/anland-termux app/ (GPL-3.0), imported as the base of the Andromarchy APK

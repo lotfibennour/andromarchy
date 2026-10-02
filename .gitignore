@@ -1,3 +1,8 @@
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
 out/
+apk/build/
+apk/.gradle/
+apk/.cxx/
+apk/local.properties
+apk/src/main/jniLibs/

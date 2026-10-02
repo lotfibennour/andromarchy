@@ -1,0 +1,14 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:shortcutId="settings"
+        android:shortcutLongLabel="@string/settings_short_label"
+        android:shortcutShortLabel="@string/settings_short_label">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:category="android.intent.category.LAUNCHER"
+            android:targetClass="com.anland.termux.SettingsActivity"
+            android:targetPackage="andro.marchy"/>
+    </shortcut>
+</shortcuts>
