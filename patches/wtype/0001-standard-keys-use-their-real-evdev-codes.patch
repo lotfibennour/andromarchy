@@ -1,5 +1,5 @@
 --- a/main.c	2026-10-02 18:02:24.428389600 +0200
-+++ b/main.c	2026-10-02 18:02:37.508535400 +0200
++++ b/main.c	2026-10-02 19:08:54.886660200 +0200
 @@ -57,6 +57,7 @@
  struct keymap_entry {
  	xkb_keysym_t xkb;
@@ -51,21 +51,22 @@
  static unsigned int append_keymap_entry(struct wtype *wtype, wchar_t ch, xkb_keysym_t xkb)
  {
  	wtype->keymap = realloc(
-@@ -154,7 +191,12 @@
+@@ -154,7 +191,13 @@
  	);
  	wtype->keymap[wtype->keymap_len - 1].wchr = ch;
  	wtype->keymap[wtype->keymap_len - 1].xkb = xkb;
 -	return wtype->keymap_len;
 +	unsigned int code = natural_code(xkb);
 +	if (!code || !code_free(wtype, code))
-+		for (code = 300; !code_free(wtype, code); code++) // other characters: above every real key
++		// other characters: F13-F24 and the unassigned codes after them (X11/XWayland stops at 255 = evdev 247)
++		for (code = 183; !code_free(wtype, code) && code < 247; code++)
 +			;
 +	wtype->keymap[wtype->keymap_len - 1].code = code;
 +	return code;
  }
  
  
-@@ -170,7 +212,7 @@
+@@ -170,7 +213,7 @@
  	};
  	for (unsigned int i = 0; i < wtype->keymap_len; i++) {
  		if (wtype->keymap[i].wchr == ch) {
@@ -74,7 +75,7 @@
  		}
  	}
  
-@@ -191,7 +233,7 @@
+@@ -191,7 +234,7 @@
  {
  	for (unsigned int i = 0; i < wtype->keymap_len; i++) {
  		if (wtype->keymap[i].xkb == xkb) {
@@ -83,7 +84,7 @@
  		}
  	}
  
-@@ -449,6 +491,14 @@
+@@ -449,6 +492,14 @@
  }
  
  
@@ -98,7 +99,7 @@
  static void upload_keymap(struct wtype *wtype)
  {
  	char filename[] = "/tmp/wtype-XXXXXX";
-@@ -466,10 +516,10 @@
+@@ -466,10 +517,10 @@
  		"xkb_keycodes \"(unnamed)\" {\n"
  		"minimum = 8;\n"
  		"maximum = %ld;\n",
