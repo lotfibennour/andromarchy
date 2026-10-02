@@ -614,6 +614,24 @@ FOPEN_WRAP(fopen64)
 // lock (useradd, usermod, groupadd...) links a temp file to passwd.lock and checks exactly that ("lock file
 // already used (nlink: 1)"). ponytail: last 8 paths, never forgotten (temp names carry a pid, a reuse is harmless).
 static char linked_copies[8][512];
+// Under fake root (sudo, ARCH_ROOT=1), libfakeroot answers stat from faked's database, keyed by inode. A file deleted
+// outside fakeroot leaves its record, and a new directory reusing that inode came back as a regular file (git:
+// "unable to unlink ...: Is a directory"). fakeroot owns owners and permissions; the file TYPE is the kernel's.
+#include <sys/syscall.h>
+static mode_t real_type(int dirfd, const char *path, int flags)
+{
+    struct stat k; // through syscall(): its wrapper gives the path the rootfs prefix, as fakechroot would
+    if (syscall(SYS_newfstatat, dirfd, path, &k, flags) != 0)
+        return 0;
+    return k.st_mode & S_IFMT;
+}
+#define FIX_TYPE(st, dirfd, path, flags)                                                                               \
+    do {                                                                                                               \
+        mode_t t_ = getenv("FAKEROOTKEY") ? real_type((dirfd), (path), (flags)) : 0;                                   \
+        if (t_ && ((st)->st_mode & S_IFMT) != t_)                                                                      \
+            (st)->st_mode = t_ | ((st)->st_mode & ~S_IFMT);                                                            \
+    } while (0)
+
 static int linked_copy(const char *path)
 {
     for (int i = 0; path && i < 8; i++)
@@ -634,6 +652,8 @@ static int linked_copy(const char *path)
         char shm_[512];                                                                                                \
         path = dev_shm(path, shm_);                                                                                    \
         int r = next(path, st);                                                                                        \
+        if (r == 0)                                                                                                    \
+            FIX_TYPE(st, AT_FDCWD, path, strncmp(#name, "lstat", 5) == 0 ? AT_SYMLINK_NOFOLLOW : 0);                   \
         if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
             st->st_nlink = 2;                                                                                          \
         return r < 0 && errno == EACCES && IS_UPTIME(path) ? next("/proc/self/stat", st) : r;                          \
@@ -651,6 +671,8 @@ STAT_WRAP(lstat64, struct stat64)
         char shm_[512];                                                                                                \
         path = dev_shm(path, shm_);                                                                                    \
         int r = next(dirfd, path, st, flags);                                                                          \
+        if (r == 0)                                                                                                    \
+            FIX_TYPE(st, dirfd, path, flags);                                                                          \
         if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
             st->st_nlink = 2;                                                                                          \
         return r < 0 && errno == EACCES && IS_UPTIME(path) ? next(AT_FDCWD, "/proc/self/stat", st, flags) : r;         \
