@@ -6,3 +6,6 @@ user_pref("gfx.webrender.software", false);
 user_pref("layers.acceleration.force-enabled", true);
 user_pref("webgl.force-enabled", true);
 user_pref("webgl.disabled", false);
+// gfxtest finds the Adreno through KGSL but cannot tell that Mesa is accelerated (no DRM device), and the
+// resulting blocklist entry wins over the force prefs above. Ignore the graphics blocklist.
+user_pref("gfx.blocklist.all", -1);

@@ -145,20 +145,31 @@ int shm_unlink(const char *name)
     return unlink(p);
 }
 
-// Firefox's parent process probes memfd by reopening it through /proc/self/fd (denied by SELinux) and falls back
-// to shm_open, while its content processes probe without reopening, accept memfd, then reject the parent's shm_open
-// handles as "not safe to map" and crash on every page. Failing the probe everywhere keeps them consistent.
-// ponytail: Firefox-only by name; make /proc/self/fd reopen work instead if other apps hit the same split.
-int memfd_create(const char *name, unsigned int flags)
+// 3'. Reopening a memfd through /proc/self/fd/N: SELinux denies it to apps. Firefox does it to make read-only copies
+//     of its shared memory; when it failed, its parent fell back to shm_open (files on disk: slow, like proot) and its
+//     content processes rejected those handles. Give back a duplicate of the memfd instead (same memory; it stays
+//     writable through the copy, which a read-only reopen would not allow).
+static int reopen_own_memfd(const char *path)
 {
-    static int (*next)(const char *, unsigned int);
-    if (name && strncmp(name, "mozilla-ipc", 11) == 0) {
-        errno = ENOSYS;
+    const char *p = NULL;
+    if (strncmp(path, "/proc/self/fd/", 14) == 0)
+        p = path + 14;
+    else if (strncmp(path, "/proc/thread-self/fd/", 21) == 0)
+        p = path + 21;
+    else if (strncmp(path, "/dev/fd/", 8) == 0)
+        p = path + 8;
+    if (!p || !*p)
         return -1;
-    }
-    if (!next)
-        next = dlsym(RTLD_NEXT, "memfd_create");
-    return next(name, flags);
+    char *end;
+    long fd = strtol(p, &end, 10);
+    if (*end || fd < 0)
+        return -1;
+    char link[64], target[64];
+    snprintf(link, sizeof link, "/proc/self/fd/%ld", fd);
+    ssize_t n = readlink(link, target, sizeof target - 1);
+    if (n < 7 || strncmp(target, "/memfd:", 7) != 0)
+        return -1;
+    return fcntl((int)fd, F_DUPFD_CLOEXEC, 0);
 }
 
 // 3a. /proc/uptime and /proc/stat: SELinux denies them to apps; uptime, htop and systemctl (process ages from the
@@ -191,6 +202,15 @@ static int fake_proc_fd(const char *path)
     return fd;
 }
 
+// After an EACCES: a reopened own memfd, or the original error.
+static int reopen_or_fail(const char *path)
+{
+    int fd = path ? reopen_own_memfd(path) : -1;
+    if (fd < 0)
+        errno = EACCES;
+    return fd;
+}
+
 #define IS_UPTIME(p)                                                                                                  \
     ((p) && (strcmp((p), "/proc/uptime") == 0 || strcmp((p), "/proc/stat") == 0 ||                                     \
              strcmp((p), "/proc/bus/pci/devices") == 0))
@@ -207,7 +227,8 @@ static int fake_proc_fd(const char *path)
         va_start(ap, flags);                                                                                            \
         mode_t mode = va_arg(ap, mode_t);                                                                               \
         va_end(ap);                                                                                                     \
-        return next(path, flags, mode);                                                                                 \
+        int r = next(path, flags, mode);                                                                                \
+        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
     }
 OPEN_WRAP(open)
 OPEN_WRAP(open64)
@@ -224,10 +245,40 @@ OPEN_WRAP(open64)
         va_start(ap, flags);                                                                                            \
         mode_t mode = va_arg(ap, mode_t);                                                                               \
         va_end(ap);                                                                                                     \
-        return next(dirfd, path, flags, mode);                                                                          \
+        int r = next(dirfd, path, flags, mode);                                                                         \
+        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
     }
 OPENAT_WRAP(openat)
 OPENAT_WRAP(openat64)
+
+// Fortified callers (-D_FORTIFY_SOURCE, e.g. Firefox) open through these, without a mode argument.
+#define OPEN2_WRAP(name)                                                                                              \
+    int name(const char *path, int flags)                                                                               \
+    {                                                                                                                   \
+        static int (*next)(const char *, int);                                                                          \
+        if (IS_UPTIME(path))                                                                                            \
+            return fake_proc_fd(path);                                                                                  \
+        if (!next)                                                                                                      \
+            next = dlsym(RTLD_NEXT, #name);                                                                             \
+        int r = next(path, flags);                                                                                      \
+        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
+    }
+OPEN2_WRAP(__open_2)
+OPEN2_WRAP(__open64_2)
+
+#define OPENAT2_WRAP(name)                                                                                            \
+    int name(int dirfd, const char *path, int flags)                                                                    \
+    {                                                                                                                   \
+        static int (*next)(int, const char *, int);                                                                     \
+        if (IS_UPTIME(path))                                                                                            \
+            return fake_proc_fd(path);                                                                                  \
+        if (!next)                                                                                                      \
+            next = dlsym(RTLD_NEXT, #name);                                                                             \
+        int r = next(dirfd, path, flags);                                                                               \
+        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
+    }
+OPENAT2_WRAP(__openat_2)
+OPENAT2_WRAP(__openat64_2)
 
 #define FOPEN_WRAP(name)                                                                                              \
     FILE *name(const char *path, const char *mode)                                                                      \
