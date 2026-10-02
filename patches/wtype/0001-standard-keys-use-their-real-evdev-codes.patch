@@ -1,0 +1,113 @@
+--- a/main.c	2026-10-02 18:02:24.428389600 +0200
++++ b/main.c	2026-10-02 18:02:37.508535400 +0200
+@@ -57,6 +57,7 @@
+ struct keymap_entry {
+ 	xkb_keysym_t xkb;
+ 	wchar_t wchr;
++	unsigned int code; // evdev keycode sent for this entry
+ };
+ 
+ 
+@@ -147,6 +148,42 @@
+ }
+ 
+ 
++// Andromarchy: standard keys get their real evdev code (KEY_SPACE...), not the next free one. Chromium and
++// Electron read the physical code: wtype's space arrived as code 1 = Escape (the address bar cancelled).
++static unsigned int natural_code(xkb_keysym_t s)
++{
++	static const char row1[] = "qwertyuiop", row2[] = "asdfghjkl", row3[] = "zxcvbnm";
++	const char *p;
++	if (s >= 'a' && s <= 'z') {
++		if ((p = strchr(row1, (int)s))) return 16 + (p - row1);
++		if ((p = strchr(row2, (int)s))) return 30 + (p - row2);
++		if ((p = strchr(row3, (int)s))) return 44 + (p - row3);
++	}
++	if (s >= '1' && s <= '9') return 2 + (s - '1');
++	switch (s) {
++	case '0': return 11; case XKB_KEY_minus: return 12; case XKB_KEY_equal: return 13;
++	case XKB_KEY_BackSpace: return 14; case XKB_KEY_Tab: return 15; case XKB_KEY_bracketleft: return 26;
++	case XKB_KEY_bracketright: return 27; case XKB_KEY_Return: return 28; case XKB_KEY_semicolon: return 39;
++	case XKB_KEY_apostrophe: return 40; case XKB_KEY_grave: return 41; case XKB_KEY_backslash: return 43;
++	case XKB_KEY_comma: return 51; case XKB_KEY_period: return 52; case XKB_KEY_slash: return 53;
++	case XKB_KEY_space: return 57; case XKB_KEY_Escape: return 1; case XKB_KEY_Home: return 102;
++	case XKB_KEY_Up: return 103; case XKB_KEY_Prior: return 104; case XKB_KEY_Left: return 105;
++	case XKB_KEY_Right: return 106; case XKB_KEY_End: return 107; case XKB_KEY_Down: return 108;
++	case XKB_KEY_Next: return 109; case XKB_KEY_Insert: return 110; case XKB_KEY_Delete: return 111;
++	}
++	if (s >= XKB_KEY_F1 && s <= XKB_KEY_F10) return 59 + (s - XKB_KEY_F1);
++	if (s == XKB_KEY_F11) return 87;
++	if (s == XKB_KEY_F12) return 88;
++	return 0;
++}
++
++static unsigned int code_free(struct wtype *wtype, unsigned int code)
++{
++	for (size_t i = 0; i < wtype->keymap_len; i++)
++		if (wtype->keymap[i].code == code) return 0;
++	return 1;
++}
++
+ static unsigned int append_keymap_entry(struct wtype *wtype, wchar_t ch, xkb_keysym_t xkb)
+ {
+ 	wtype->keymap = realloc(
+@@ -154,7 +191,12 @@
+ 	);
+ 	wtype->keymap[wtype->keymap_len - 1].wchr = ch;
+ 	wtype->keymap[wtype->keymap_len - 1].xkb = xkb;
+-	return wtype->keymap_len;
++	unsigned int code = natural_code(xkb);
++	if (!code || !code_free(wtype, code))
++		for (code = 300; !code_free(wtype, code); code++) // other characters: above every real key
++			;
++	wtype->keymap[wtype->keymap_len - 1].code = code;
++	return code;
+ }
+ 
+ 
+@@ -170,7 +212,7 @@
+ 	};
+ 	for (unsigned int i = 0; i < wtype->keymap_len; i++) {
+ 		if (wtype->keymap[i].wchr == ch) {
+-			return i + 1;
++			return wtype->keymap[i].code;
+ 		}
+ 	}
+ 
+@@ -191,7 +233,7 @@
+ {
+ 	for (unsigned int i = 0; i < wtype->keymap_len; i++) {
+ 		if (wtype->keymap[i].xkb == xkb) {
+-			return i + 1;
++			return wtype->keymap[i].code;
+ 		}
+ 	}
+ 
+@@ -449,6 +491,14 @@
+ }
+ 
+ 
++static unsigned int max_code(struct wtype *wtype)
++{
++	unsigned int m = 1;
++	for (size_t i = 0; i < wtype->keymap_len; i++)
++		if (wtype->keymap[i].code > m) m = wtype->keymap[i].code;
++	return m;
++}
++
+ static void upload_keymap(struct wtype *wtype)
+ {
+ 	char filename[] = "/tmp/wtype-XXXXXX";
+@@ -466,10 +516,10 @@
+ 		"xkb_keycodes \"(unnamed)\" {\n"
+ 		"minimum = 8;\n"
+ 		"maximum = %ld;\n",
+-		wtype->keymap_len + 8 + 1
++		(long)max_code(wtype) + 8
+ 	);
+ 	for (size_t i = 0; i < wtype->keymap_len; i++) {
+-		fprintf(f, "<K%ld> = %ld;\n", i + 1, i + 8 + 1);
++		fprintf(f, "<K%ld> = %ld;\n", i + 1, (long)wtype->keymap[i].code + 8);
+ 	}
+ 	fprintf(f, "};\n");
+ 

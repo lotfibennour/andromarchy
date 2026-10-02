@@ -75,6 +75,13 @@ tar xzf /tmp/yay.tgz -C /tmp && install -m 755 /tmp/yay_13.0.1_aarch64/yay /usr/
 (cd /tmp && wayland-scanner client-header $L/native/input-method-unstable-v2.xml input-method-unstable-v2-client-protocol.h &&
   wayland-scanner private-code $L/native/input-method-unstable-v2.xml input-method-unstable-v2-protocol.c &&
   gcc -O2 -I/tmp -o /usr/local/bin/osk-autoshow $L/native/osk-autoshow.c input-method-unstable-v2-protocol.c -lwayland-client)
+# wtype (the on-screen keyboard's typing tool) with standard keys on their real evdev codes: Chromium/Electron read
+# the physical code, and stock wtype's space arrived as code 1 = Escape.
+rm -rf /tmp/wtype && git clone -q https://github.com/atx/wtype /tmp/wtype && git -C /tmp/wtype checkout -q v0.4 &&
+  (cd /tmp/wtype && patch -p1 < $L/patches/wtype/0001-standard-keys-use-their-real-evdev-codes.patch &&
+    X=protocol/virtual-keyboard-unstable-v1.xml &&
+    wayland-scanner client-header $X virtual-keyboard-unstable-v1-client-protocol.h && wayland-scanner private-code $X vk.c &&
+    gcc -O2 -I. -o /usr/local/bin/wtype main.c vk.c $(pkg-config --cflags --libs wayland-client xkbcommon)) && rm -rf /tmp/wtype
 gcc -O2 -shared -fPIC -o /opt/lotfix/android-compat.so $L/native/android-compat.c $L/native/go-syscalls.c -ldl
 # glibc reads locales internally from LOCPATH, which ignores locale-archive: one directory per locale.
 localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8
