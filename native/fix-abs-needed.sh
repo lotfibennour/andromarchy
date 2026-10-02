@@ -9,7 +9,18 @@ set -uo pipefail
 fix() {
   local f=$1 needed
   [ -f "$f" ] && [ ! -L "$f" ] || return 0
+  # Some files ship read-only (perl modules: r-x------): writable while patching, mode restored after.
+  local mode; mode=$(stat -c %a "$f"); chmod u+w "$f" 2>/dev/null; trap "chmod $mode \"$f\" 2>/dev/null" RETURN
   needed=$(readelf -d "$f" 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(\/[^]]*\)\]/\1/p') || return 0
+  # RUNPATH entries rewritten relative to the file ($ORIGIN), which the loader resolves from the file's real (host)
+  # location: found at once, without restarting the session for a new ld.so.conf.d entry.
+  local rp new="" changed=0 d
+  rp=$(readelf -d "$f" 2>/dev/null | sed -n 's/.*(R\(UN\)\?PATH).*\[\([^]]*\)\]/\2/p')
+  for d in $(echo "$rp" | tr ':' ' ') $(for n in $needed; do echo "${n%/*}"; done); do
+    case $d in /*) d='$ORIGIN/'$(realpath -m --relative-to="${f%/*}" "$d"); changed=1 ;; esac
+    case ":$new:" in *":$d:"*) ;; *) new=${new:+$new:}$d ;; esac
+  done
+  [ $changed = 1 ] && patchelf --set-rpath "$new" "$f" && echo "fix-abs-needed: $f: RUNPATH $new"
   for n in $needed; do
     patchelf --replace-needed "$n" "${n##*/}" "$f" && echo "fix-abs-needed: $f: $n -> ${n##*/}"
     # The bare name must still be found: put the library's directory on the search path (lotfix-run reads
