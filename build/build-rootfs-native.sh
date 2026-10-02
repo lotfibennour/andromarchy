@@ -34,8 +34,9 @@ inside_installed "set -euo pipefail
   # Hyprland + aquamarine with our patches (skipped when already built).
   [ -f $G/out/lotfix-hyprland-aarch64.tar.zst ] || sudo bash $REPO/build/build-hyprland.sh $REPO/patches $G/out
   rm -rf $G/rootfs && mkdir -p $G/rootfs
-  # Its absolute symlinks mean the new root (android-compat writes them relative to it).
-  ANDROID_COMPAT_SYMLINK_ROOT=$G/rootfs tar -xpf alarm.tar.gz -C $G/rootfs
+  # Its absolute symlinks mean the new root (android-compat writes them relative to it). Read-only directory
+  # modes last: as the app (no root), tar could not fill a 0555 directory it had just created.
+  ANDROID_COMPAT_SYMLINK_ROOT=$G/rootfs tar --delay-directory-restore -xpf alarm.tar.gz -C $G/rootfs
   # Our runtime, so lotfix-run can start the new rootfs: patched loader + libc, android-compat, fakechroot,
   # fake root (TCP faked). build-inside.sh refreshes the patched glibc from the new rootfs's own.
   mkdir -p $G/rootfs/opt $G/rootfs/usr/lib/libfakeroot $G/rootfs/usr/local/bin $G/rootfs/usr/local/lib
