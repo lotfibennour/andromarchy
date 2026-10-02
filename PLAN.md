@@ -142,6 +142,7 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 | # | Étape | Critère de réussite |
 |---|---|---|
 | 4.1 | **Lanceur natif** (NDK) qui remplace `arch-native.sh`/`hypr-native.sh` (variables, chargeur patché, préchargements, `faked` pour le mode root). | Depuis Termux, le lanceur ouvre le `bash` d'Arch et démarre Hyprland comme les scripts. |
+| 4.1b | **Audio** : brancher le son d'Anland (PipeWire côté Linux, audio natif de l'appli) sur la session Hyprland. | Une vidéo dans Firefox s'entend, le volume se règle depuis Omarchy. |
 | 4.2 | **Fusion** : appli `org.lotfix` = affichage anland-termux + terminal et service termux-app + démon Anland (NDK) + lanceur ; l'appli s'ouvre sur Omarchy, le terminal reste accessible. | Une seule APK affiche Omarchy, à côté d'un Termux officiel installé. |
 | 4.3 | **Premier lancement** : téléchargement ou import du système Arch, sha256, extraction (droits conservés), `setup-rootfs.sh`, barre de progression. | Appareil vierge : bureau Omarchy sans taper aucune commande. |
 | 4.4 | **Cycle de vie et HyperOS** : un service pour Hyprland et Anland, wake-lock, aide aux réglages (processus fantômes, démarrage automatique, batterie, notifications), veille/réveil. | Session vivante après 1 h en arrière-plan et 10 cycles veille/réveil. |
@@ -149,6 +150,7 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 | 4.6 | **Clavier à l'écran** : valider `SystemIME`/`VirtualKeyboardView` avec Hyprland (accents, emoji). | Taper dans un terminal et dans Firefox sans clavier physique. |
 | 4.7 | **Mises à jour** : ✅ hook pacman qui repatche glibc (2026-10-02, testé) ; mise à jour de l'appli et du système. | `pacman -Syu` avec une nouvelle glibc ne casse rien. |
 | 4.8 | **Test grand public.** | Installation → bureau Omarchy en moins de 10 minutes. |
+| 4.9 | **Pont d'état Android** : l'appli lit batterie, réseau, volume et luminosité (API Android, `/sys` étant interdit) et les transmet au système Arch (faux UPower, etc.) ; réglage du volume et de la luminosité via Android. Pas de gestion du Wi-Fi ni du Bluetooth depuis Linux. | La barre d'Omarchy affiche le niveau de batterie et l'état du réseau. |
 
 ## Phase 5 : maintenance
 
