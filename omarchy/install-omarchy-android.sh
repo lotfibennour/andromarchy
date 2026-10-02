@@ -86,6 +86,10 @@ if [ ! -d ~/.config/omarchy/plugins/$OSK_ID ]; then
   sed -i 's|    if (codePoint < 0x80) return text|    if (/^[A-Za-z0-9]$/.test(text)) return text\n    // Other ASCII (space, punctuation) needs its keysym name for wtype -k (Andromarchy fix)\n    for (var name in tokenCharMap)\n        if (tokenCharMap[name] === text) return name|' \
     ~/.config/omarchy/plugins/$OSK_ID/KeyboardLayout.js
 fi
+# Shown automatically when a text field gets focus, hidden while a physical keyboard is connected (osk-autoshow,
+# built into /usr/local/bin by build-inside.sh). Started with Hyprland.
+grep -q 'osk-autoshow' ~/.config/hypr/autostart.lua ||
+  printf '\n-- Android/Andromarchy: on-screen keyboard follows text-field focus\no.exec_on_start("osk-autoshow")\n' >> ~/.config/hypr/autostart.lua
 "$OMARCHY_PATH"/bin/omarchy-plugin-enable $OSK_ID || echo "on-screen keyboard: enable it with 'omarchy plugin enable $OSK_ID'"
 
 # kitty: spawn bash directly. Its default (kitten run-shell + shell integration) works only partly without proot.

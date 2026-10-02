@@ -60,6 +60,10 @@ pacman -S --noconfirm --needed patchelf
 install -m 755 $L/native/fix-abs-needed.sh /opt/lotfix/
 install -Dm 644 $L/native/lotfix-abs-needed.hook /usr/share/libalpm/hooks/zz-lotfix-abs-needed.hook
 /opt/lotfix/fix-abs-needed.sh --all
+# On-screen keyboard follows text-field focus (Omarchy autostart runs it): a minimal input-method-v2 client.
+(cd /tmp && wayland-scanner client-header $L/native/input-method-unstable-v2.xml input-method-unstable-v2-client-protocol.h &&
+  wayland-scanner private-code $L/native/input-method-unstable-v2.xml input-method-unstable-v2-protocol.c &&
+  gcc -O2 -I/tmp -o /usr/local/bin/osk-autoshow $L/native/osk-autoshow.c input-method-unstable-v2-protocol.c -lwayland-client)
 gcc -O2 -shared -fPIC -o /opt/lotfix/android-compat.so $L/native/android-compat.c $L/native/go-syscalls.c -ldl
 # glibc reads locales internally from LOCPATH, which ignores locale-archive: one directory per locale.
 localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8
