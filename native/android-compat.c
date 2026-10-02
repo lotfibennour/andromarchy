@@ -149,6 +149,80 @@ int shm_unlink(const char *name)
 //     of its shared memory; when it failed, its parent fell back to shm_open (files on disk: slow, like proot) and its
 //     content processes rejected those handles. Give back a duplicate of the memfd instead (same memory; it stays
 //     writable through the copy, which a read-only reopen would not allow).
+#include <stdarg.h>
+#include <sys/mman.h>
+
+// 3''. Chromium (Brave, Electron) does want a genuinely read-only reopen: it checks F_GETFL == O_RDONLY and aborts
+//      (brk) on the read-write duplicate. A memfd cannot provide that here, so Chromium's regions ("shared-memory-region")
+//      become files in the rootfs's /tmp/.shm, reopened read-only by path. Seals (memfd-only) are pretended. The file
+//      is unlinked when the original fd is closed; open copies keep the memory.
+// ponytail: disk-backed (slower than RAM), Chromium's regions only; a tmpfs would avoid it but apps cannot mount.
+#define CR_FDS 4096
+static char *cr_paths[CR_FDS]; // fd -> backing file of a Chromium "memfd"
+static unsigned cr_seals[CR_FDS];
+
+static int cr_memfd(const char *name, unsigned int flags)
+{
+    static unsigned counter;
+    char p[256];
+    mkdir("/tmp/.shm", 01777);
+    snprintf(p, sizeof p, "/tmp/.shm/cr-%d-%u-%s", (int)getpid(), __atomic_fetch_add(&counter, 1, __ATOMIC_RELAXED), name);
+    int fd = open(p, O_RDWR | O_CREAT | O_EXCL | ((flags & MFD_CLOEXEC) ? O_CLOEXEC : 0), 0600);
+    if (fd < 0)
+        return -1;
+    if (fd >= CR_FDS) {
+        unlink(p); // cannot track it: plain unlinked file (no read-only reopen)
+        return fd;
+    }
+    free(cr_paths[fd]);
+    cr_paths[fd] = strdup(p);
+    cr_seals[fd] = 0;
+    return fd;
+}
+
+int memfd_create(const char *name, unsigned int flags)
+{
+    static int (*next)(const char *, unsigned int);
+    if (name && strcmp(name, "shared-memory-region") == 0)
+        return cr_memfd(name, flags);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "memfd_create");
+    return next(name, flags);
+}
+
+int close(int fd)
+{
+    static int (*next)(int);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "close");
+    if (fd >= 0 && fd < CR_FDS && cr_paths[fd]) {
+        unlink(cr_paths[fd]);
+        free(cr_paths[fd]);
+        cr_paths[fd] = NULL;
+    }
+    return next(fd);
+}
+
+int fcntl(int fd, int cmd, ...)
+{
+    static int (*next)(int, int, ...);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "fcntl");
+    va_list ap;
+    va_start(ap, cmd);
+    long arg = va_arg(ap, long);
+    va_end(ap);
+    if (fd >= 0 && fd < CR_FDS && cr_paths[fd]) {
+        if (cmd == F_ADD_SEALS) { // pretend: a regular file has no seals
+            cr_seals[fd] |= (unsigned)arg;
+            return 0;
+        }
+        if (cmd == F_GET_SEALS)
+            return (int)cr_seals[fd];
+    }
+    return next(fd, cmd, arg);
+}
+
 static int reopen_own_memfd(const char *path)
 {
     const char *p = NULL;
@@ -164,6 +238,8 @@ static int reopen_own_memfd(const char *path)
     long fd = strtol(p, &end, 10);
     if (*end || fd < 0)
         return -1;
+    if (fd < CR_FDS && cr_paths[fd]) // Chromium region: a real read-only reopen through its backing file
+        return open(cr_paths[fd], O_RDONLY | O_CLOEXEC);
     char link[64], target[64];
     snprintf(link, sizeof link, "/proc/self/fd/%ld", fd);
     ssize_t n = readlink(link, target, sizeof target - 1);
@@ -409,6 +485,8 @@ long syscall(long nr, ...)
         errno = ENOSYS;
         return -1;
     }
+    if (nr == SYS_memfd_create) // Chromium calls it raw: same routing as the libc wrapper (section 3'')
+        return memfd_create((const char *)a[0], (unsigned int)a[1]);
     if (!next)
         next = dlsym(RTLD_NEXT, "syscall");
     return next(nr, a[0], a[1], a[2], a[3], a[4], a[5]);

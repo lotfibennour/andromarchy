@@ -101,11 +101,17 @@ public class SessionService extends Service {
         // 1. Display daemon: relays buffers and input between this app's display and Hyprland.
         spawn("anland", List.of(libDir + "/libanland.so", sock.getPath()), null);
 
-        // 2. Sound: Hyprland's Anland backend creates PipeWire nodes, so the stack must exist (it reconnects anyway).
+        // 2. Session D-Bus (systemd provides it on a normal Linux login). Browsers, file dialogs, portals and tray
+        //    apps need it; archEnv() gives every program its address.
+        new File(run, "bus").delete();
+        spawn("dbus", List.of(launcher, "-c", "exec dbus-daemon --session --nofork --nopidfile --address=unix:path="
+                + new File(run, "bus").getPath()), archEnv(run, sock));
+
+        // 3. Sound: Hyprland's Anland backend creates PipeWire nodes, so the stack must exist (it reconnects anyway).
         for (String p : new String[] {"pipewire", "wireplumber", "pipewire-pulse"})
             spawn(p, List.of(launcher, "-c", "exec " + p), archEnv(run, sock));
 
-        // 3. Hyprland with Omarchy. It waits for this app's display to connect (MainActivity).
+        // 4. Hyprland with Omarchy. It waits for this app's display to connect (MainActivity).
         Map<String, String> env = archEnv(run, sock);
         env.put("EGL_PLATFORM", "surfaceless");
         env.put("OMARCHY_PATH", "/usr/share/omarchy");
@@ -119,6 +125,7 @@ public class SessionService extends Service {
         env.put("ARCH_EXCLUDE_EXTRA", run.getPath()); // sockets: real paths, not rewritten into the rootfs
         env.put("XDG_RUNTIME_DIR", run.getPath());
         env.put("ANLAND_SOCKET", sock.getPath());
+        env.put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + new File(run, "bus").getPath());
         env.remove("WAYLAND_DISPLAY");
         env.remove("DISPLAY");
         return env;

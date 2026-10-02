@@ -86,6 +86,12 @@ grep -q 'systemctl --user init' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/no-systemd: user services (enabled units, Restart=)\no.exec_on_start("pgrep -f \x27pytho[n].*systemctl --user init\x27 >/dev/null || systemctl --user init")\n' >> ~/.config/hypr/autostart.lua
 # (the guard matches the Python process: the sh -c line running it also contains "systemctl --user init")
 
+# Chromium-based browsers (Brave, Chromium, Electron apps via their flags files): their sandbox needs a setuid helper
+# or user namespaces, neither available to an Android app. Same trade-off as Firefox's sandbox.
+for f in chromium-flags.conf brave-flags.conf brave-origin-flags.conf; do
+  grep -qx -- '--no-sandbox' ~/.config/$f 2>/dev/null || printf -- '--no-sandbox\n' >> ~/.config/$f
+done
+
 # Keybinds from virtual keyboards (the on-screen keyboard's wtype): wtype uploads its own keymap, and by default
 # Hyprland decodes binds with the main layout, where wtype's first keycode is Escape (Super+W opened the system
 # menu). Resolve binds with the sending keyboard's own keymap.
