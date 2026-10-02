@@ -60,6 +60,13 @@ pacman -S --noconfirm --needed patchelf
 install -m 755 $L/native/fix-abs-needed.sh /opt/lotfix/
 install -Dm 644 $L/native/lotfix-abs-needed.hook /usr/share/libalpm/hooks/zz-lotfix-abs-needed.hook
 /opt/lotfix/fix-abs-needed.sh --all
+# Omarchy's "Install" menus use sudo and yay. No real root on Android: sudo runs commands as fake root
+# (native/sudo-shim.sh); yay is the upstream static aarch64 release (Go: works through go-syscalls).
+install -m 755 $L/native/sudo-shim.sh /usr/local/bin/sudo
+curl -fsSL -o /tmp/yay.tgz https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_aarch64.tar.gz
+echo "75bc500c8677d6760f51117ae0a61689e9cf165bea3c4800825a5c879d030726  /tmp/yay.tgz" | sha256sum -c --quiet
+tar xzf /tmp/yay.tgz -C /tmp && install -m 755 /tmp/yay_13.0.1_aarch64/yay /usr/local/bin/yay && rm -rf /tmp/yay*
+
 # On-screen keyboard follows text-field focus (Omarchy autostart runs it): a minimal input-method-v2 client.
 (cd /tmp && wayland-scanner client-header $L/native/input-method-unstable-v2.xml input-method-unstable-v2-client-protocol.h &&
   wayland-scanner private-code $L/native/input-method-unstable-v2.xml input-method-unstable-v2-protocol.c &&
