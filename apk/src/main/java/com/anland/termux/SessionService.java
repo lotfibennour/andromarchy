@@ -91,6 +91,9 @@ public class SessionService extends Service {
         // Requests from Linux for Android-only actions (Wi-Fi panel, launching Android apps).
         requests = new AndroidRequests(this, runDir(this));
         requests.startWatching();
+        // Android apps in Omarchy's menu (.desktop entries in the rootfs, launched through the requests above).
+        apps = new AndroidApps(this);
+        apps.register(this);
 
         try {
             startSession();
@@ -159,6 +162,7 @@ public class SessionService extends Service {
 
     /** Android's default network -> run/network ("wifi <strength> <ssid>" | "wired" | "none"), read by android-nm. */
     private AndroidRequests requests;
+    private AndroidApps apps;
 
     private final ConnectivityManager.NetworkCallback network = new ConnectivityManager.NetworkCallback() {
         @Override
@@ -239,6 +243,7 @@ public class SessionService extends Service {
         unregisterReceiver(battery);
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(network);
         requests.stopWatching();
+        unregisterReceiver(apps);
         for (Process p : processes)
             p.destroy();
         if (wakeLock != null && wakeLock.isHeld())

@@ -300,6 +300,7 @@ public class MainActivity extends Activity
         // Andromarchy: this app is also the Linux side. Start the session (daemon, audio, Hyprland) if the Arch
         // rootfs is installed; this activity then connects to the daemon like the Termux version did.
         HardwareKeyboard.watch(this); // the on-screen keyboard stays hidden while a physical one is connected
+        backlight = Backlight.start(this); // Omarchy's brightness controls -> this window's brightness
         if (SessionService.rootfsReady(this))
             SessionService.start(this);
         else
@@ -2079,6 +2080,7 @@ public class MainActivity extends Activity
 
     // 原有 handleTouchEvent 一字未改
     private LongPress longPress;
+    private Backlight backlight; // a FileObserver must stay referenced, or it stops when collected
 
     private boolean handleTouchEvent(MotionEvent event) {
         if (longPress == null)

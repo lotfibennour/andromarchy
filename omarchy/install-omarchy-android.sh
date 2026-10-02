@@ -74,6 +74,11 @@ EOF
 chmod 755 /usr/local/bin/systemd-run
 chmod +x /usr/local/bin/systemd-cat
 
+# The app's display (Hyprland output ANLAND-1) is the built-in panel: Omarchy recognises one by its connector name
+# (eDP/LVDS/DSI), e.g. for the brightness keys and the monitor panel's slider.
+grep -rl 'eDP|LVDS|DSI)' "$OMARCHY_PATH"/bin "$OMARCHY_PATH"/shell | xargs -r sed -i 's/(eDP|LVDS|DSI)/(eDP|LVDS|DSI|ANLAND)/g'
+pacman -S --noconfirm --needed brightnessctl
+
 # DNS provider (network panel): no NetworkManager/systemd-resolved here; the rootfs's /etc/resolv.conf is written
 # directly (native/omarchy-dns-android.sh). Omarchy's own kept as omarchy-dns.orig.
 cp -a "$OMARCHY_PATH/bin/omarchy-dns" "$OMARCHY_PATH/bin/omarchy-dns.orig"

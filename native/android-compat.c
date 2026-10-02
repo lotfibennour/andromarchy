@@ -420,6 +420,15 @@ static int reopen_or_fail(const char *path)
 // rootfs's /tmp/.shm.
 static const char *dev_shm(const char *path, char *buf)
 {
+    // Also /sys/class/backlight (denied to apps): the app keeps an "android" backlight device in
+    // $XDG_RUNTIME_DIR/backlight and applies its brightness file to its window (Omarchy's brightness keys and monitor
+    // panel, brightnessctl, all read and write that directory as on a laptop).
+    static const char bl[] = "/sys/class/backlight";
+    const char *run = getenv("XDG_RUNTIME_DIR");
+    if (path && run && strncmp(path, bl, sizeof bl - 1) == 0 && (path[sizeof bl - 1] == '/' || !path[sizeof bl - 1])) {
+        snprintf(buf, 512, "%s/backlight%s", run, path + sizeof bl - 1);
+        return buf;
+    }
     if (!path || strncmp(path, "/dev/shm", 8) != 0 || (path[8] != '/' && path[8]))
         return path;
     mkdir("/tmp/.shm", 01777); // through fakechroot: lands in <rootfs>/tmp/.shm
@@ -442,6 +451,16 @@ SHM_PATH_WRAP(int, statfs, struct statfs *)
 SHM_PATH_WRAP(int, statfs64, struct statfs64 *)
 SHM_PATH_WRAP(int, statvfs, struct statvfs *)
 SHM_PATH_WRAP(int, statvfs64, struct statvfs64 *)
+
+#include <dirent.h>
+DIR *opendir(const char *path) // glibc opens the directory internally (no open() wrapper): /sys/class/backlight
+{
+    static DIR *(*next)(const char *);
+    char shm_[512];
+    if (!next)
+        next = dlsym(RTLD_NEXT, "opendir");
+    return next(dev_shm(path, shm_));
+}
 
 int unlink(const char *path)
 {
@@ -577,6 +596,8 @@ static FILE *guest_maps(FILE *real)
     FILE *name(const char *path, const char *mode)                                                                      \
     {                                                                                                                   \
         static FILE *(*next)(const char *, const char *);                                                               \
+        char shm_[512];                                                                                                 \
+        path = dev_shm(path, shm_);                                                                                     \
         if (IS_UPTIME(path)) {                                                                                          \
             int fd = fake_proc_fd(path);                                                                                       \
             return fd < 0 ? NULL : fdopen(fd, "r");                                                                     \
@@ -610,6 +631,8 @@ static int linked_copy(const char *path)
         static int (*next)(const char *, type *);                                                                     \
         if (!next)                                                                                                     \
             next = dlsym(RTLD_NEXT, #name);                                                                            \
+        char shm_[512];                                                                                                \
+        path = dev_shm(path, shm_);                                                                                    \
         int r = next(path, st);                                                                                        \
         if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
             st->st_nlink = 2;                                                                                          \
@@ -625,6 +648,8 @@ STAT_WRAP(lstat64, struct stat64)
         static int (*next)(int, const char *, type *, int);                                                           \
         if (!next)                                                                                                     \
             next = dlsym(RTLD_NEXT, #name);                                                                            \
+        char shm_[512];                                                                                                \
+        path = dev_shm(path, shm_);                                                                                    \
         int r = next(dirfd, path, st, flags);                                                                          \
         if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
             st->st_nlink = 2;                                                                                          \
@@ -638,6 +663,8 @@ int access(const char *path, int mode)
     static int (*next)(const char *, int);
     if (!next)
         next = dlsym(RTLD_NEXT, "access");
+    char shm_[512];
+    path = dev_shm(path, shm_);
     int r = next(path, mode);
     return r < 0 && errno == EACCES && IS_UPTIME(path) && !(mode & (W_OK | X_OK)) ? 0 : r;
 }
