@@ -2078,7 +2078,12 @@ public class MainActivity extends Activity
     }
 
     // 原有 handleTouchEvent 一字未改
+    private LongPress longPress;
+
     private boolean handleTouchEvent(MotionEvent event) {
+        if (longPress == null)
+            longPress = new LongPress(this);
+        longPress.onTouch(event); // edit menu on a long press (only observes)
         int action = event.getActionMasked();
         int pointerIdx = event.getActionIndex();
         int pointerId = event.getPointerId(pointerIdx);
