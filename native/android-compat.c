@@ -911,9 +911,13 @@ int execve(const char *path, char *const argv[], char *const envp[])
     char *env[n + N_RUNTIME + 1];
     for (size_t i = 0; i < n; i++)
         env[i] = envp[i];
-    for (size_t i = 0; i < N_RUNTIME; i++)
+    for (size_t i = 0; i < N_RUNTIME; i++) {
         if (runtime_env[i] && !has_var(envp, runtime_vars[i]))
             env[n++] = runtime_env[i];
+        // fakechroot's execve reads them from our own environment (env -i cleared it): restore, we exec anyway.
+        if (runtime_env[i] && !getenv(runtime_vars[i]))
+            putenv(runtime_env[i]);
+    }
     env[n] = NULL;
     return next(self_exe_target(path), argv, env);
 }
