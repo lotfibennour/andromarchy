@@ -7,7 +7,7 @@ Appareil cible : POCO Pad 2 Pro (Android 16, Snapdragon/Adreno).
 ## Choix fixés
 
 - **Pas de proot.** Le shim LD_PRELOAD (fakechroot + fakeroot portés) gère les binaires dynamiques, et un loader `SECCOMP_RET_TRAP` + handler SIGSYS gère les binaires statiques.
-- **Affichage :** Anland (GPL-3.0), fusionné avec termux-app dans une seule APK `org.lotfix` (phase 4).
+- **Affichage :** Anland (GPL-3.0), fusionné avec termux-app dans une seule APK `andro.marchy` (phase 4).
 - **Pas de gestion du matériel** : réseau, Bluetooth, luminosité (limite n°8 abandonnée).
 - **Abandonnés :** seccomp USER_NOTIF, unshare/namespaces, vrai systemd.
 
@@ -118,7 +118,7 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 
 ## Phase 4 : l'APK unique
 
-**Décision (2026-10-02), option C allégée :** une seule APK `org.lotfix` (nom court : limite `sun_path` de 108 octets) qui reprend l'appli d'affichage et le démon d'**anland-termux** et le code Java utile de **termux-app** (vue terminal, service de premier plan, wake-lock), tous GPL-3.0. Elle **coexiste** avec un Termux officiel. **Aucun paquet Termux** : un lanceur natif (NDK) remplace `arch-native.sh`/`hypr-native.sh`, le téléchargement et l'extraction se font en Java, le démon Anland (747 lignes de C sans dépendance) est compilé avec le NDK, et `setup-rootfs.sh` s'exécute avec le `bash` d'Arch. Tout le reste passe par `pacman`.
+**Décision (2026-10-02), option C allégée :** une seule APK `andro.marchy` (nom court : limite `sun_path` de 108 octets) qui reprend l'appli d'affichage et le démon d'**anland-termux** et le code Java utile de **termux-app** (vue terminal, service de premier plan, wake-lock), tous GPL-3.0. Elle **coexiste** avec un Termux officiel. **Aucun paquet Termux** : un lanceur natif (NDK) remplace `arch-native.sh`/`hypr-native.sh`, le téléchargement et l'extraction se font en Java, le démon Anland (747 lignes de C sans dépendance) est compilé avec le NDK, et `setup-rootfs.sh` s'exécute avec le `bash` d'Arch. Tout le reste passe par `pacman`.
 
 **Étude 4.0 (faite) :** l'appli d'affichage (`MainActivity`, JNI : Surface, dma-buf, sockets, audio) se connecte au démon par socket Unix ; dans une seule appli, le pont `sharedUserId`/Binder disparaît. Anland-termux contient déjà le **clavier physique dédié** (`KeyInterceptor`, service d'accessibilité) et le **clavier à l'écran** (`SystemIME`, `VirtualKeyboardView`) : 4.5 et 4.6 sont surtout à valider avec Hyprland.
 
@@ -143,7 +143,7 @@ Notes pour la phase 2 : pacman 7 exige `DisableSandbox` (pas de Landlock dans le
 |---|---|---|
 | ✅ 4.1 | **Lanceur natif** (2026-10-02 : [native/launcher/lotfix-run.c](native/launcher/lotfix-run.c), environnement identique au script, NDK 28 API 24, segments alignés 16 Ko, session Hyprland lancée avec) (NDK) qui remplace `arch-native.sh`/`hypr-native.sh` (variables, chargeur patché, préchargements, `faked` pour le mode root). | Depuis Termux, le lanceur ouvre le `bash` d'Arch et démarre Hyprland comme les scripts. |
 | 4.1b | **Audio** : brancher le son d'Anland (PipeWire côté Linux, audio natif de l'appli) sur la session Hyprland. | Une vidéo dans Firefox s'entend, le volume se règle depuis Omarchy. |
-| 4.2 | **Fusion** : appli `org.lotfix` = affichage anland-termux + terminal et service termux-app + démon Anland (NDK) + lanceur ; l'appli s'ouvre sur Omarchy, le terminal reste accessible. | Une seule APK affiche Omarchy, à côté d'un Termux officiel installé. |
+| 4.2 | **Fusion** : appli `andro.marchy` = affichage anland-termux + terminal et service termux-app + démon Anland (NDK) + lanceur ; l'appli s'ouvre sur Omarchy, le terminal reste accessible. | Une seule APK affiche Omarchy, à côté d'un Termux officiel installé. |
 | 4.3 | **Premier lancement** : téléchargement ou import du système Arch, sha256, extraction (droits conservés), `setup-rootfs.sh`, barre de progression. | Appareil vierge : bureau Omarchy sans taper aucune commande. |
 | 4.4 | **Cycle de vie et HyperOS** : un service pour Hyprland et Anland, wake-lock, aide aux réglages (processus fantômes, démarrage automatique, batterie, notifications), veille/réveil. | Session vivante après 1 h en arrière-plan et 10 cycles veille/réveil. |
 | 4.5 | **Clavier physique dédié** : valider `KeyInterceptor` avec Hyprland, capture de la souris, aide aux paramètres restreints. | Super+Entrée ouvre un terminal, Alt+Tab reste dans Hyprland, clavier normal hors de l'appli. |
