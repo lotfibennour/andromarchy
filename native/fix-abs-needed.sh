@@ -16,6 +16,11 @@ fix() {
     # /etc/ld.so.conf.d). nvim -> /usr/lib/lua/5.1/lpeg.so broke without it.
     grep -qxF "${n%/*}" /etc/ld.so.conf.d/zz-abs-needed.conf 2>/dev/null || echo "${n%/*}" >> /etc/ld.so.conf.d/zz-abs-needed.conf
   done
+  # Absolute RUNPATH/RPATH dirs (epiphany -> /usr/lib/epiphany) are searched on Android's filesystem by the loader:
+  # same treatment, on the search path.
+  for d in $(readelf -d "$f" 2>/dev/null | sed -n 's/.*(R\(UN\)\?PATH).*\[\([^]]*\)\]/\2/p' | tr ':' ' '); do
+    case $d in /*) grep -qxF "$d" /etc/ld.so.conf.d/zz-abs-needed.conf 2>/dev/null || echo "$d" >> /etc/ld.so.conf.d/zz-abs-needed.conf ;; esac
+  done
 }
 
 if [ "${1:-}" = --all ]; then

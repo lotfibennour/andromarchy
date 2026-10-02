@@ -312,6 +312,7 @@ static int fake_proc(const char *p, char *buf, size_t sz)
         {"sys/kernel/pid_max", "4194304\n"},
         {"sys/fs/file-max", "9223372036854775807\n"},
         {"sys/vm/overcommit_memory", "0\n"},
+        {"cgroups", "#subsys_name\thierarchy\tnum_cgroups\tenabled\n"},
         {"swaps", "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n"},
         {"filesystems", "nodev\tsysfs\nnodev\ttmpfs\nnodev\tproc\n\text4\n\tf2fs\n\tvfat\n"},
         {"net/dev", "Inter-|   Receive                                                |  Transmit\n"
@@ -373,7 +374,21 @@ static int fake_proc_fd(const char *path)
 // ($XDG_RUNTIME_DIR/denied.log: "program path"), so the next missing fake is found by reading it, not per app.
 static int reopen_or_fail(const char *path)
 {
+    int err = errno;
+    // /proc/<pid>/root: xdg-desktop-portal opens it to look for /.flatpak-info and refuses every request when it
+    // cannot ("Portal operation not allowed"; Android answers EACCES or ENOENT). All our processes share the rootfs:
+    // answer with it (a host app).
+    char *e;
+    if (path && rootfs_base && strncmp(path, "/proc/", 6) == 0 && strtol(path + 6, &e, 10) > 0 &&
+        strcmp(e, "/root") == 0)
+        return syscall(SYS_openat, AT_FDCWD, rootfs_base, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (err != EACCES) {
+        errno = err;
+        return -1;
+    }
     int fd = path ? reopen_own_memfd(path) : -1;
+    if (fd < 0 && path && strncmp(path, "/proc/", 6) == 0 && strtol(path + 6, &e, 10) > 0 && !*e)
+        path = NULL; // other users' processes (pkill, ps scan them all): expected, not worth a journal line
     if (fd < 0) {
         const char *run = getenv("XDG_RUNTIME_DIR");
         char log[512], line[1024];
@@ -405,7 +420,7 @@ static int reopen_or_fail(const char *path)
         mode_t mode = va_arg(ap, mode_t);                                                                               \
         va_end(ap);                                                                                                     \
         int r = next(path, flags, mode);                                                                                \
-        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
+        return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPEN_WRAP(open)
 OPEN_WRAP(open64)
@@ -423,7 +438,7 @@ OPEN_WRAP(open64)
         mode_t mode = va_arg(ap, mode_t);                                                                               \
         va_end(ap);                                                                                                     \
         int r = next(dirfd, path, flags, mode);                                                                         \
-        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
+        return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPENAT_WRAP(openat)
 OPENAT_WRAP(openat64)
@@ -438,7 +453,7 @@ OPENAT_WRAP(openat64)
         if (!next)                                                                                                      \
             next = dlsym(RTLD_NEXT, #name);                                                                             \
         int r = next(path, flags);                                                                                      \
-        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
+        return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPEN2_WRAP(__open_2)
 OPEN2_WRAP(__open64_2)
@@ -452,10 +467,35 @@ OPEN2_WRAP(__open64_2)
         if (!next)                                                                                                      \
             next = dlsym(RTLD_NEXT, #name);                                                                             \
         int r = next(dirfd, path, flags);                                                                               \
-        return r < 0 && errno == EACCES ? reopen_or_fail(path) : r;                                                     \
+        return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPENAT2_WRAP(__openat_2)
 OPENAT2_WRAP(__openat64_2)
+
+// /proc/self/maps read through stdio: programs looking for their own install dir (VLC: libvlccore's path -> plugins)
+// got host paths, which fakechroot then prefixed again. Serve a copy with the rootfs prefix removed. Raw open()
+// readers (sanitizers, Chromium) keep the real file.
+static FILE *guest_maps(FILE *real)
+{
+    size_t n = rootfs_base ? strlen(rootfs_base) : 0;
+    int fd = memfd_create("maps", MFD_CLOEXEC);
+    if (!n || fd < 0) {
+        if (fd >= 0)
+            close(fd);
+        return real;
+    }
+    char line[4096];
+    while (fgets(line, sizeof line, real)) {
+        char *p = strstr(line, rootfs_base);
+        if (p && p[n] == '/')
+            memmove(p, p + n, strlen(p + n) + 1);
+        if (write(fd, line, strlen(line)) < 0)
+            break;
+    }
+    fclose(real);
+    lseek(fd, 0, SEEK_SET);
+    return fdopen(fd, "r");
+}
 
 #define FOPEN_WRAP(name)                                                                                              \
     FILE *name(const char *path, const char *mode)                                                                      \
@@ -467,10 +507,48 @@ OPENAT2_WRAP(__openat64_2)
         }                                                                                                               \
         if (!next)                                                                                                      \
             next = dlsym(RTLD_NEXT, #name);                                                                             \
-        return next(path, mode);                                                                                        \
+        FILE *f = next(path, mode);                                                                                     \
+        return f && path && strcmp(path, "/proc/self/maps") == 0 ? guest_maps(f) : f;                                  \
     }
 FOPEN_WRAP(fopen)
 FOPEN_WRAP(fopen64)
+
+// stat/access on the faked /proc files: programs test them before opening (LibreOffice: "/proc not mounted").
+// Answer with the attributes of a readable /proc file.
+#include <sys/stat.h>
+#define STAT_WRAP(name, type)                                                                                         \
+    int name(const char *path, type *st)                                                                               \
+    {                                                                                                                  \
+        static int (*next)(const char *, type *);                                                                     \
+        if (!next)                                                                                                     \
+            next = dlsym(RTLD_NEXT, #name);                                                                            \
+        int r = next(path, st);                                                                                        \
+        return r < 0 && errno == EACCES && IS_UPTIME(path) ? next("/proc/self/stat", st) : r;                          \
+    }
+STAT_WRAP(stat, struct stat)
+STAT_WRAP(stat64, struct stat64)
+STAT_WRAP(lstat, struct stat)
+STAT_WRAP(lstat64, struct stat64)
+#define FSTATAT_WRAP(name, type)                                                                                      \
+    int name(int dirfd, const char *path, type *st, int flags)                                                         \
+    {                                                                                                                  \
+        static int (*next)(int, const char *, type *, int);                                                           \
+        if (!next)                                                                                                     \
+            next = dlsym(RTLD_NEXT, #name);                                                                            \
+        int r = next(dirfd, path, st, flags);                                                                          \
+        return r < 0 && errno == EACCES && IS_UPTIME(path) ? next(AT_FDCWD, "/proc/self/stat", st, flags) : r;         \
+    }
+FSTATAT_WRAP(fstatat, struct stat)
+FSTATAT_WRAP(fstatat64, struct stat64)
+
+int access(const char *path, int mode)
+{
+    static int (*next)(const char *, int);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "access");
+    int r = next(path, mode);
+    return r < 0 && errno == EACCES && IS_UPTIME(path) && !(mode & (W_OK | X_OK)) ? 0 : r;
+}
 
 // 3b. Hard links: Android's SELinux denies them to apps (EACCES). X servers create their lock file by linking a
 //     temp file into place ("Linking lock file in place failed"). Fall back to an exclusive copy: same "only one
@@ -1055,4 +1133,36 @@ ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t len, siz
         next = dlsym(RTLD_NEXT, "__readlinkat_chk");
     ssize_t n = next(dirfd, path, buf, len, buflen);
     return IS_PROC(path) ? fix_proc_link(path, buf, len < buflen ? len : buflen, n) : n;
+}
+
+// dladdr: the loader knows libraries by their host path (fakechroot loads them from the rootfs). Programs that find
+// their data next to their own library (VLC's plugins, relocatable builds) then got the rootfs prefixed twice.
+// Show the guest path: the suffix of the same string, so it stays valid as long as the library.
+static void guest_fname(Dl_info *info)
+{
+    size_t n = rootfs_base ? strlen(rootfs_base) : 0;
+    if (n && info->dli_fname && strncmp(info->dli_fname, rootfs_base, n) == 0 && info->dli_fname[n] == '/')
+        info->dli_fname += n;
+}
+
+int dladdr(const void *addr, Dl_info *info)
+{
+    static int (*next)(const void *, Dl_info *);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "dladdr");
+    int r = next(addr, info);
+    if (r)
+        guest_fname(info);
+    return r;
+}
+
+int dladdr1(const void *addr, Dl_info *info, void **extra, int flags)
+{
+    static int (*next)(const void *, Dl_info *, void **, int);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "dladdr1");
+    int r = next(addr, info, extra, flags);
+    if (r)
+        guest_fname(info);
+    return r;
 }
