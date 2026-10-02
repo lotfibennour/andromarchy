@@ -28,7 +28,7 @@ pacman -U --noconfirm /tmp/mesa/*.pkg.tar.*
 pacman -S --noconfirm --needed \
   base-devel git cmake ninja pkgconf python autoconf automake libtool po4a \
   hyprland hyprwayland-scanner wayland-protocols glaze cli11 hwdata libdisplay-info libinput seatd pixman \
-  fakechroot fakeroot firefox kitty foot alacritty \
+  fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl \
   mesa-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc
 
 
@@ -40,6 +40,13 @@ mkdir -p /tmp/fr && tar -xzf $L/fakeroot.tar.gz -C /tmp/fr --strip-components=1
 tar -xf $L/lotfix-hyprland-aarch64.tar.zst -C /
 # Only now: ignored earlier, pacman could not resolve them as hyprland dependencies.
 grep -q '^IgnorePkg.*hyprland' $C || sed -i "/^IgnorePkg/ s/$/ aquamarine hyprland/" $C
+
+# Browser: Brave Origin (AUR binary release, aarch64), instead of Firefox. makepkg refuses root: a throwaway user.
+useradd -m aurbuild 2>/dev/null || true
+rm -rf /tmp/brave && runuser -u aurbuild -- git clone -q https://aur.archlinux.org/brave-origin-bin.git /tmp/brave &&
+  (cd /tmp/brave && runuser -u aurbuild -- makepkg --noconfirm -s 2>&1 | tail -3) &&
+  pacman -U --noconfirm /tmp/brave/brave-origin-bin-*.pkg.tar.*
+rm -rf /tmp/brave; userdel -r aurbuild 2>/dev/null || true
 
 # Omarchy.
 rm -rf /tmp/omarchy
