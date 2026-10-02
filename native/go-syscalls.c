@@ -92,6 +92,11 @@ static const char *translate(const char *p, char *out)
     return out;
 }
 
+const char *gs_translate(const char *p, char *out)
+{
+    return translate(p, out);
+}
+
 // Inverse for paths the kernel returns (getcwd, readlinkat): show them from inside the rootfs.
 static long strip_base(char *buf, long n)
 {
@@ -377,27 +382,30 @@ void go_syscalls_init(const char *program, const char *self_guest)
                          b != NULL, l != NULL, program && program[0] == '/' ? is_go_binary(program) : -1);
         raw(SYS_write, 2, msg, m);
     }
+    // Base and excludes serve every process (gs_translate, used by android-compat's syscall()); the trap only Go.
+    if (b && !base_len) {
+        strncpy(base, b, sizeof base - 1);
+        base_len = slen(base);
+        const char *ex = getenv("FAKECHROOT_EXCLUDE_PATH");
+        while (ex && *ex && n_excludes < 16) {
+            const char *e = strchr(ex, ':');
+            size_t n = e ? (size_t)(e - ex) : slen(ex);
+            if (n && n < sizeof excludes[0]) {
+                memcpy(excludes[n_excludes], ex, n);
+                excludes[n_excludes++][n] = 0;
+            }
+            ex = e ? e + 1 : NULL;
+        }
+    }
     if (!b || !l || !program || program[0] != '/' || !is_go_binary(program))
         return;
     dl_iterate_phdr(main_text_range, NULL);
     if (!text_lo || (text_lo >> 32) != ((text_hi - 1) >> 32))
         return; // text must sit within one 4 GiB window for the 32-bit BPF compare
 
-    strncpy(base, b, sizeof base - 1);
-    base_len = slen(base);
     strncpy(loader, l, sizeof loader - 1);
     if (self_guest)
         strncpy(self_exe_guest, self_guest, sizeof self_exe_guest - 1);
-    const char *ex = getenv("FAKECHROOT_EXCLUDE_PATH");
-    while (ex && *ex && n_excludes < 16) {
-        const char *e = strchr(ex, ':');
-        size_t n = e ? (size_t)(e - ex) : slen(ex);
-        if (n && n < sizeof excludes[0]) {
-            memcpy(excludes[n_excludes], ex, n);
-            excludes[n_excludes++][n] = 0;
-        }
-        ex = e ? e + 1 : NULL;
-    }
 
     struct sigaction sa = {0};
     sa.sa_sigaction = on_sigsys;

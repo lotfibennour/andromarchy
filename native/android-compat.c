@@ -90,8 +90,8 @@ __attribute__((constructor)) static void android_compat_init(int argc, char **ar
     (void)envp;
     rootfs_base = getenv("FAKECHROOT_BASE");
     chromium_no_sandbox(argc, argv);
+    go_syscalls_init(program_invocation_name, main_program()); // path base for every process, Go trap for Go
     if (program_invocation_name && program_invocation_name[0] == '/') {
-        go_syscalls_init(program_invocation_name, main_program()); // both resolve the host path first
         // fakechroot's loader exec passes the HOST path as argv[0]. Programs that locate their files from it
         // (gcc: cc1, specs...) then build host paths that fakechroot prefixes a second time. Show the guest path.
         strip_base(program_invocation_name); // in place: argv[0] is the same string
@@ -192,6 +192,8 @@ int shm_unlink(const char *name)
 //     writable through the copy, which a read-only reopen would not allow).
 #include <stdarg.h>
 #include <sys/mman.h>
+#include <sys/sysinfo.h>
+#include <sys/utsname.h>
 
 // 3''. Chromium (Brave, Electron) does want a genuinely read-only reopen: it checks F_GETFL == O_RDONLY and aborts
 //      (brk) on the read-write duplicate. A memfd cannot provide that here, so Chromium's regions ("shared-memory-region")
@@ -289,7 +291,8 @@ static int reopen_own_memfd(const char *path)
     return fcntl((int)fd, F_DUPFD_CLOEXEC, 0);
 }
 
-// 3a. /proc/uptime and /proc/stat: SELinux denies them to apps; uptime, htop and systemctl (process ages from the
+// 3a. Denied /proc files (probed as the app: loadavg, version, net/*, sys/kernel/*...): tools exit on EACCES.
+//     /proc/uptime and /proc/stat: SELinux denies them to apps; uptime, htop and systemctl (process ages from the
 //     boot time) need them. Serve them from CLOCK_BOOTTIME in a memfd: uptime with idle 0, stat with a zero "cpu" line
 //     and the real "btime". /proc/bus/pci/devices is denied too, and libpci exit()s on that: Firefox's gfxtest died
 //     before probing EGL, so WebRender was blocklisted (GLXTEST_FAILED). Serve it empty: a tablet has no PCI bus.
@@ -297,18 +300,64 @@ static int reopen_own_memfd(const char *path)
 // ponytail: no per-CPU times in the fake /proc/stat; CPU meters (htop, top) stay at zero.
 #include <stdarg.h>
 #include <sys/mman.h>
+#include <sys/sysinfo.h>
+#include <sys/utsname.h>
 #include <time.h>
+
+// Contents for a denied /proc file, or -1 to pass the path through.
+static int fake_proc(const char *p, char *buf, size_t sz)
+{
+    static const char *const fixed[][2] = {
+        {"bus/pci/devices", ""}, // a tablet has no PCI bus
+        {"sys/kernel/pid_max", "4194304\n"},
+        {"sys/fs/file-max", "9223372036854775807\n"},
+        {"sys/vm/overcommit_memory", "0\n"},
+        {"swaps", "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n"},
+        {"filesystems", "nodev\tsysfs\nnodev\ttmpfs\nnodev\tproc\n\text4\n\tf2fs\n\tvfat\n"},
+        {"net/dev", "Inter-|   Receive                                                |  Transmit\n"
+                    " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop "
+                    "fifo colls carrier compressed\n"},
+        {"net/route", "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n"},
+        {"net/arp", "IP address       HW type     Flags       HW address            Mask     Device\n"},
+        {"net/tcp", "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"},
+        {"net/udp", "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"},
+        {"net/tcp6", "  sl  local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"},
+        {"net/udp6", "  sl  local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"},
+        {"net/if_inet6", ""}, {"partitions", "major minor  #blocks  name\n\n"}, {"diskstats", ""}, {"vmstat", ""},
+        {"zoneinfo", ""}, {"cmdline", "\n"}, {"modules", ""}, {"interrupts", ""}, {"pressure/cpu", ""},
+    };
+    if (!p || strncmp(p, "/proc/", 6) != 0)
+        return -1;
+    p += 6;
+    struct timespec t;
+    struct sysinfo si;
+    struct utsname u;
+    clock_gettime(CLOCK_BOOTTIME, &t);
+    if (strcmp(p, "uptime") == 0)
+        return snprintf(buf, sz, "%ld.%02ld 0.00\n", (long)t.tv_sec, t.tv_nsec / 10000000);
+    if (strcmp(p, "stat") == 0)
+        return snprintf(buf, sz, "cpu  0 0 0 0 0 0 0 0 0 0\nbtime %ld\n", (long)(time(NULL) - t.tv_sec));
+    if (strcmp(p, "loadavg") == 0 && sysinfo(&si) == 0)
+        return snprintf(buf, sz, "%.2f %.2f %.2f 1/%d %d\n", si.loads[0] / 65536.0, si.loads[1] / 65536.0,
+                        si.loads[2] / 65536.0, si.procs, getpid());
+    if (uname(&u) == 0) {
+        if (strcmp(p, "version") == 0)
+            return snprintf(buf, sz, "Linux version %s (android) %s\n", u.release, u.version);
+        if (strcmp(p, "sys/kernel/osrelease") == 0)
+            return snprintf(buf, sz, "%s\n", u.release);
+        if (strcmp(p, "sys/kernel/hostname") == 0)
+            return snprintf(buf, sz, "%s\n", u.nodename);
+    }
+    for (size_t i = 0; i < sizeof fixed / sizeof *fixed; i++)
+        if (strcmp(p, fixed[i][0]) == 0)
+            return snprintf(buf, sz, "%s", fixed[i][1]);
+    return -1;
+}
 
 static int fake_proc_fd(const char *path)
 {
-    struct timespec t;
-    clock_gettime(CLOCK_BOOTTIME, &t);
-    char buf[128];
-    int n = strcmp(path, "/proc/uptime") == 0
-                ? snprintf(buf, sizeof buf, "%ld.%02ld 0.00\n", (long)t.tv_sec, t.tv_nsec / 10000000)
-            : strcmp(path, "/proc/stat") == 0
-                ? snprintf(buf, sizeof buf, "cpu  0 0 0 0 0 0 0 0 0 0\nbtime %ld\n", (long)(time(NULL) - t.tv_sec))
-                : 0; // /proc/bus/pci/devices: empty
+    char buf[512];
+    int n = fake_proc(path, buf, sizeof buf);
     int fd = memfd_create("proc", MFD_CLOEXEC);
     if (fd < 0 || write(fd, buf, n) != n || lseek(fd, 0, SEEK_SET) < 0) {
         if (fd >= 0)
@@ -319,18 +368,29 @@ static int fake_proc_fd(const char *path)
     return fd;
 }
 
-// After an EACCES: a reopened own memfd, or the original error.
+#include <sys/syscall.h> // raw openat for the journal: our open wrappers would recurse on a denial
+// After an EACCES: a reopened own memfd, or the original error. Denials go to one journal for every program
+// ($XDG_RUNTIME_DIR/denied.log: "program path"), so the next missing fake is found by reading it, not per app.
 static int reopen_or_fail(const char *path)
 {
     int fd = path ? reopen_own_memfd(path) : -1;
-    if (fd < 0)
+    if (fd < 0) {
+        const char *run = getenv("XDG_RUNTIME_DIR");
+        char log[512], line[1024];
+        if (run && path && snprintf(log, sizeof log, "%s/denied.log", run) < (int)sizeof log) {
+            int l = syscall(SYS_openat, AT_FDCWD, log, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+            if (l >= 0) {
+                int n = snprintf(line, sizeof line, "%s %s\n", program_invocation_short_name, path);
+                if (write(l, line, n > (int)sizeof line ? (int)sizeof line : n) < 0) {}
+                close(l);
+            }
+        }
         errno = EACCES;
+    }
     return fd;
 }
 
-#define IS_UPTIME(p)                                                                                                  \
-    ((p) && (strcmp((p), "/proc/uptime") == 0 || strcmp((p), "/proc/stat") == 0 ||                                     \
-             strcmp((p), "/proc/bus/pci/devices") == 0))
+#define IS_UPTIME(p) (fake_proc((p), (char[512]){0}, 512) >= 0)
 
 #define OPEN_WRAP(name, ...)                                                                                          \
     int name(const char *path, int flags, ...)                                                                          \
@@ -504,12 +564,36 @@ static int android_blocked(long nr)
     case SYS_faccessat2:
     case SYS_setfsuid:
     case SYS_setfsgid:
-    // statx takes a path, and a raw syscall bypasses fakechroot (libuv's stat, hence neovim: "/root" missing,
-    // runtime not found). With ENOSYS, libuv falls back to fstatat through libc, which fakechroot rewrites.
-    case SYS_statx:
         return 1;
     default:
         return 0;
+    }
+}
+
+// Raw path syscalls bypass fakechroot (libuv's statx: neovim found no "/root"). Give them the rootfs prefix like
+// fakechroot would, for every program at once: index of each path argument (-1: none).
+const char *gs_translate(const char *p, char *out);
+
+static void path_args(long nr, int *i, int *j)
+{
+    *i = *j = -1;
+    switch (nr) {
+    case SYS_openat: case SYS_openat2: case SYS_newfstatat: case SYS_faccessat: case SYS_faccessat2:
+    case SYS_mkdirat: case SYS_mknodat: case SYS_unlinkat: case SYS_fchmodat: case SYS_fchownat:
+    case SYS_statx: case SYS_utimensat: case SYS_readlinkat: case SYS_inotify_add_watch:
+    case SYS_getxattr: case SYS_lgetxattr: case SYS_setxattr: case SYS_lsetxattr: case SYS_listxattr:
+    case SYS_llistxattr: case SYS_removexattr: case SYS_lremovexattr: case SYS_name_to_handle_at:
+        *i = (nr >= SYS_setxattr && nr <= SYS_lremovexattr) ? 0 : 1;
+        break;
+    case SYS_truncate: case SYS_statfs: case SYS_chdir: case SYS_chroot: case SYS_execve: case SYS_execveat:
+        *i = nr == SYS_execveat ? 1 : 0;
+        break;
+    case SYS_symlinkat:
+        *i = 2;
+        break;
+    case SYS_linkat: case SYS_renameat: case SYS_renameat2:
+        *i = 1, *j = 3;
+        break;
     }
 }
 
@@ -518,9 +602,11 @@ long syscall(long nr, ...)
     static long (*next)(long, ...);
     va_list ap;
     long a[6];
+    char p1[4096], p2[4096];
+    int i, j;
     va_start(ap, nr);
-    for (int i = 0; i < 6; i++)
-        a[i] = va_arg(ap, long);
+    for (int k = 0; k < 6; k++)
+        a[k] = va_arg(ap, long);
     va_end(ap);
     if (android_blocked(nr)) {
         errno = ENOSYS;
@@ -528,6 +614,11 @@ long syscall(long nr, ...)
     }
     if (nr == SYS_memfd_create) // Chromium calls it raw: same routing as the libc wrapper (section 3'')
         return memfd_create((const char *)a[0], (unsigned int)a[1]);
+    path_args(nr, &i, &j);
+    if (i >= 0)
+        a[i] = (long)gs_translate((const char *)a[i], p1);
+    if (j >= 0)
+        a[j] = (long)gs_translate((const char *)a[j], p2);
     if (!next)
         next = dlsym(RTLD_NEXT, "syscall");
     return next(nr, a[0], a[1], a[2], a[3], a[4], a[5]);

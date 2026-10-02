@@ -124,6 +124,7 @@ public class SessionService extends Service {
         env.put("ARCH_ROOTFS", rootfs(this).getPath());
         env.put("ARCH_EXCLUDE_EXTRA", run.getPath()); // sockets: real paths, not rewritten into the rootfs
         env.put("XDG_RUNTIME_DIR", run.getPath());
+        env.put("TZ", java.util.TimeZone.getDefault().getID()); // glibc only knows /etc/localtime otherwise: UTC
         env.put("ANLAND_SOCKET", sock.getPath());
         env.put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + new File(run, "bus").getPath());
         env.remove("WAYLAND_DISPLAY");

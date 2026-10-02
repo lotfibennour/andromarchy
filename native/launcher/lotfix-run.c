@@ -175,6 +175,10 @@ int main(int argc, char **argv)
     setf("LOCPATH", "%s/usr/lib/locale", R);
     setf("GCONV_PATH", "%s/usr/lib/gconv", R);
     setenv("LANG", "C.UTF-8", 0);
+    // glibc reads /etc/localtime internally (no fakechroot rewrite): Omarchy showed UTC. TZ comes from Android
+    // (SessionService), zone files from the rootfs. AppImages: no FUSE for apps, so they extract and run.
+    setf("TZDIR", "%s/usr/share/zoneinfo", R);
+    setenv("APPIMAGE_EXTRACT_AND_RUN", "1", 1);
 
     // GPU for every program: Adreno through KGSL (no DRM node). The ANLAND* variables make the KGSL Mesa expose
     // dmabuf import/export, which Wayland GPU clients need. ARCH_GPU=zink: OpenGL on Vulkan/Turnip.

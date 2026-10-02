@@ -40,6 +40,10 @@ unset PREFIX ANDROID_ROOT_TERMUX
 # glibc opens locales and gconv modules internally (no fakechroot rewrite) from Android's /usr: point it at the
 # rootfs with real paths. LOCPATH ignores locale-archive, hence the per-locale dirs made by setup-rootfs.sh.
 export LOCPATH=$R/usr/lib/locale GCONV_PATH=$R/usr/lib/gconv LANG=${LANG:-C.UTF-8}
+# glibc reads /etc/localtime internally (no fakechroot rewrite): Android's zone, the rootfs's zone files.
+export TZDIR=$R/usr/share/zoneinfo TZ=${TZ:-$(getprop persist.sys.timezone 2>/dev/null)}
+# AppImages need FUSE (not available to apps): extract and run instead.
+export APPIMAGE_EXTRACT_AND_RUN=1
 
 # GPU for every program, not only those Hyprland starts: Adreno through KGSL (no DRM node on Android).
 # The ANLAND* variables are what make the KGSL Mesa expose dmabuf import/export, which Wayland GPU clients need.
