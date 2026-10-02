@@ -52,6 +52,9 @@ bash $L/native/install-systemctl.sh
 # No-proot runtime, kept in the rootfs so it always matches its glibc: the seccomp-patched loader + libc,
 # and android-compat.so (preloaded into every process by arch-native.sh).
 python3 $L/native/patch-glibc-syscalls.py /usr/lib /opt/lotfix/arch-glibc
+# ...and again after every glibc upgrade (pacman hook), from a copy of the script kept in the rootfs.
+install -m 644 $L/native/patch-glibc-syscalls.py /opt/lotfix/
+install -Dm 644 $L/native/lotfix-glibc.hook /usr/share/libalpm/hooks/zz-lotfix-glibc.hook
 gcc -O2 -shared -fPIC -o /opt/lotfix/android-compat.so $L/native/android-compat.c $L/native/go-syscalls.c -ldl
 # glibc reads locales internally from LOCPATH, which ignores locale-archive: one directory per locale.
 localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8

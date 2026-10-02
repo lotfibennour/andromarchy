@@ -1,0 +1,13 @@
+# Android/no-proot: the loader and libc in /opt/lotfix/arch-glibc are Arch's, with the syscalls Android's seccomp
+# kills neutralized (patch-glibc-syscalls.py). Re-make them from every new glibc, or the next programs would load an
+# unpatched libc and die with SIGSYS. Until then the old patched pair stays first on the library path.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = glibc
+
+[Action]
+Description = Patching glibc for Android's seccomp (Lotfix)...
+When = PostTransaction
+Exec = /usr/bin/python3 /opt/lotfix/patch-glibc-syscalls.py /usr/lib /opt/lotfix/arch-glibc
