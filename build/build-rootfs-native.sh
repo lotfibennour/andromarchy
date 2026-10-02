@@ -48,6 +48,7 @@ inside_installed "set -euo pipefail
   cp -r $REPO/patches $REPO/omarchy $REPO/native $G/rootfs/tmp/lotfix/
   cp $REPO/build/build-inside.sh $G/rootfs/tmp/lotfix/
   cp mesa.tar fakeroot.tar.gz $G/out/lotfix-hyprland-aarch64.tar.zst $G/rootfs/tmp/lotfix/
+  rm -f $G/rootfs/etc/resolv.conf # a link to systemd-resolved's stub, absent here
   printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > $G/rootfs/etc/resolv.conf"
 
 echo "== 2/3 build-inside.sh (new rootfs, native)"
