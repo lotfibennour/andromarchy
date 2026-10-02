@@ -81,6 +81,10 @@ if [ ! -d ~/.config/omarchy/plugins/$OSK_ID ]; then
   mkdir -p ~/.config/omarchy/plugins
   git clone -q https://github.com/abdxdev/omarchy-onscreen-keyboard.git ~/.config/omarchy/plugins/$OSK_ID
   git -C ~/.config/omarchy/plugins/$OSK_ID checkout -q $OSK_REV
+  # Modifier combos with an ASCII symbol (Super+Space: Omarchy menu) passed the character to `wtype -k`, which
+  # wants a keysym name. Use the plugin's own name table for them.
+  sed -i 's|    if (codePoint < 0x80) return text|    if (/^[A-Za-z0-9]$/.test(text)) return text\n    // Other ASCII (space, punctuation) needs its keysym name for wtype -k (Andromarchy fix)\n    for (var name in tokenCharMap)\n        if (tokenCharMap[name] === text) return name|' \
+    ~/.config/omarchy/plugins/$OSK_ID/KeyboardLayout.js
 fi
 "$OMARCHY_PATH"/bin/omarchy-plugin-enable $OSK_ID || echo "on-screen keyboard: enable it with 'omarchy plugin enable $OSK_ID'"
 
