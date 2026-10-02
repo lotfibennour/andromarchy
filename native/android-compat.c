@@ -163,7 +163,9 @@ int memfd_create(const char *name, unsigned int flags)
 
 // 3a. /proc/uptime and /proc/stat: SELinux denies them to apps; uptime, htop and systemctl (process ages from the
 //     boot time) need them. Serve them from CLOCK_BOOTTIME in a memfd: uptime with idle 0, stat with a zero "cpu" line
-//     and the real "btime". Every other path passes through.
+//     and the real "btime". /proc/bus/pci/devices is denied too, and libpci exit()s on that: Firefox's gfxtest died
+//     before probing EGL, so WebRender was blocklisted (GLXTEST_FAILED). Serve it empty: a tablet has no PCI bus.
+//     Every other path passes through.
 // ponytail: no per-CPU times in the fake /proc/stat; CPU meters (htop, top) stay at zero.
 #include <stdarg.h>
 #include <sys/mman.h>
@@ -176,7 +178,9 @@ static int fake_proc_fd(const char *path)
     char buf[128];
     int n = strcmp(path, "/proc/uptime") == 0
                 ? snprintf(buf, sizeof buf, "%ld.%02ld 0.00\n", (long)t.tv_sec, t.tv_nsec / 10000000)
-                : snprintf(buf, sizeof buf, "cpu  0 0 0 0 0 0 0 0 0 0\nbtime %ld\n", (long)(time(NULL) - t.tv_sec));
+            : strcmp(path, "/proc/stat") == 0
+                ? snprintf(buf, sizeof buf, "cpu  0 0 0 0 0 0 0 0 0 0\nbtime %ld\n", (long)(time(NULL) - t.tv_sec))
+                : 0; // /proc/bus/pci/devices: empty
     int fd = memfd_create("proc", MFD_CLOEXEC);
     if (fd < 0 || write(fd, buf, n) != n || lseek(fd, 0, SEEK_SET) < 0) {
         if (fd >= 0)
@@ -187,7 +191,9 @@ static int fake_proc_fd(const char *path)
     return fd;
 }
 
-#define IS_UPTIME(p) ((p) && (strcmp((p), "/proc/uptime") == 0 || strcmp((p), "/proc/stat") == 0))
+#define IS_UPTIME(p)                                                                                                  \
+    ((p) && (strcmp((p), "/proc/uptime") == 0 || strcmp((p), "/proc/stat") == 0 ||                                     \
+             strcmp((p), "/proc/bus/pci/devices") == 0))
 
 #define OPEN_WRAP(name, ...)                                                                                          \
     int name(const char *path, int flags, ...)                                                                          \
