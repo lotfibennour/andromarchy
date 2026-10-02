@@ -66,6 +66,18 @@ grep -q 'systemctl --user init' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/no-systemd: user services (enabled units, Restart=)\no.exec_on_start("pgrep -f \x27pytho[n].*systemctl --user init\x27 >/dev/null || systemctl --user init")\n' >> ~/.config/hypr/autostart.lua
 # (the guard matches the Python process: the sh -c line running it also contains "systemctl --user init")
 
+# On-screen keyboard by default (abdxdev/omarchy-onscreen-keyboard, MIT): a bar plugin that types through wtype
+# (Wayland virtual keyboard), so it reaches every app with accents too. Pinned commit.
+OSK_ID=io.github.abdxdev.onscreen-keyboard
+OSK_REV=0d42cadf48729ed2badfeee24163be7e740ec042
+pacman -S --noconfirm --needed wtype
+if [ ! -d ~/.config/omarchy/plugins/$OSK_ID ]; then
+  mkdir -p ~/.config/omarchy/plugins
+  git clone -q https://github.com/abdxdev/omarchy-onscreen-keyboard.git ~/.config/omarchy/plugins/$OSK_ID
+  git -C ~/.config/omarchy/plugins/$OSK_ID checkout -q $OSK_REV
+fi
+"$OMARCHY_PATH"/bin/omarchy-plugin-enable $OSK_ID || echo "on-screen keyboard: enable it with 'omarchy plugin enable $OSK_ID'"
+
 # kitty: spawn bash directly. Its default (kitten run-shell + shell integration) works only partly without proot.
 grep -q '^shell /usr/bin/bash' ~/.config/kitty/kitty.conf 2>/dev/null ||
   printf '\n# Android/no-proot: spawn bash directly\nshell /usr/bin/bash\n' >> ~/.config/kitty/kitty.conf
