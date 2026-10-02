@@ -1322,3 +1322,85 @@ NO_IPC(int, msgget, key_t k, int f)
 NO_IPC(int, msgsnd, int id, const void *m, size_t s, int f)
 NO_IPC(ssize_t, msgrcv, int id, void *m, size_t s, long t, int f)
 NO_IPC(int, msgctl, int id, int c, struct msqid_ds *b)
+
+// symlink/symlinkat: fakechroot stores an absolute target as a HOST path (the kernel follows links on Android's
+// filesystem), so links broke as soon as the rootfs was reached under another name (/data/data vs /data/user/0:
+// LibreOffice's launcher, .desktop files...). Write rootfs targets relative to the link instead: valid for the
+// kernel and under any rootfs path. Excluded host paths (/dev, /proc, the run dir) stay absolute.
+#include <libgen.h>
+static int guest_dir_of(int dirfd, const char *linkpath, char *out, size_t len)
+{
+    char tmp[4096], lp[4096];
+    snprintf(lp, sizeof lp, "%s", linkpath);
+    const char *d = dirname(lp); // "." for a bare name
+    if (d[0] == '/')
+        snprintf(tmp, sizeof tmp, "%s", d);
+    else {
+        char base[4096];
+        if (dirfd == AT_FDCWD) {
+            if (!getcwd(base, sizeof base)) // fakechroot: guest view
+                return -1;
+        } else {
+            char fdl[64];
+            snprintf(fdl, sizeof fdl, "/proc/self/fd/%d", dirfd);
+            ssize_t n = readlink(fdl, base, sizeof base - 1); // our wrapper: base stripped
+            if (n <= 0)
+                return -1;
+            base[n] = 0;
+        }
+        snprintf(tmp, sizeof tmp, "%s/%s", base, d);
+    }
+    snprintf(out, len, "%s", strip_base(tmp));
+    return 0;
+}
+
+static const char *relative_target(const char *target, int dirfd, const char *linkpath, char *out)
+{
+    char t[4096], dir[4096], probe[4096];
+    if (!target || target[0] != '/' || !rootfs_base)
+        return target;
+    snprintf(t, sizeof t, "%s", target);
+    strip_base(t);
+    if (gs_translate(t, probe) == t) // excluded (/dev, /proc, run dir): stays a host path
+        return target;
+    if (guest_dir_of(dirfd, linkpath, dir, sizeof dir) < 0)
+        return target;
+    // Common leading components of dir and t, then one ".." per remaining dir component.
+    const char *a = dir, *b = t;
+    const char *la = a, *lb = b;
+    while (*a && *a == *b) {
+        if (*a == '/') {
+            la = a;
+            lb = b;
+        }
+        a++, b++;
+    }
+    if (!*a && (*b == '/' || !*b)) // dir is a prefix of t
+        la = a, lb = b;
+    out[0] = 0;
+    for (const char *p = la; *p; p++)
+        if (*p == '/' && p[1] && strcmp(p, "/.") != 0)
+            strcat(out, "../");
+    strcat(out, *lb == '/' ? lb + 1 : lb);
+    if (!out[0])
+        strcpy(out, ".");
+    return out;
+}
+
+int symlinkat(const char *target, int dirfd, const char *linkpath)
+{
+    static int (*next)(const char *, int, const char *);
+    char rel[8192];
+    if (!next)
+        next = dlsym(RTLD_NEXT, "symlinkat");
+    return next(relative_target(target, dirfd, linkpath, rel), dirfd, linkpath);
+}
+
+int symlink(const char *target, const char *linkpath)
+{
+    static int (*next)(const char *, const char *);
+    char rel[8192];
+    if (!next)
+        next = dlsym(RTLD_NEXT, "symlink");
+    return next(relative_target(target, AT_FDCWD, linkpath, rel), linkpath);
+}
