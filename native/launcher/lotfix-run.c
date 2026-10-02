@@ -194,6 +194,10 @@ int main(int argc, char **argv)
     setenv("MOZ_DISABLE_SOCKET_PROCESS_SANDBOX", "1", 1);
     setenv("MOZ_DISABLE_GMP_SANDBOX", "1", 1);
     setenv("MOZ_DISABLE_UTILITY_SANDBOX", "1", 1);
+    // Same for the other sandbox families, which all need user namespaces or setuid helpers (denied to apps):
+    // Electron apps, and WebKitGTK's web process (bubblewrap). Chromium itself: android-compat adds --no-sandbox.
+    setenv("ELECTRON_DISABLE_SANDBOX", "1", 1);
+    setenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1", 1);
     // systemctl is docker-systemctl-replacement: its --user mode defaults to the system multi-user.target.
     setenv("SYSTEMD_DEFAULT_TARGET", "default.target", 1);
 

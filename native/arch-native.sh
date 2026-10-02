@@ -56,6 +56,8 @@ fi
 # Trade-off: web content runs without Firefox's process sandbox.
 export MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 \
   MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_UTILITY_SANDBOX=1
+# Other sandbox families (user namespaces / setuid helpers): Electron, WebKitGTK. Chromium: android-compat.
+export ELECTRON_DISABLE_SANDBOX=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
 
 # systemctl is docker-systemctl-replacement (native/install-systemctl.sh); its --user mode defaults to the system
 # multi-user.target, while user units are enabled into default.target.

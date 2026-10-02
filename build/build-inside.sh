@@ -65,6 +65,8 @@ install -Dm 644 $L/native/lotfix-abs-needed.hook /usr/share/libalpm/hooks/zz-lot
 install -m 755 $L/native/sudo-shim.sh /usr/local/bin/sudo
 # bubblewrap needs user namespaces (denied to apps): GTK's image loaders (glycin) and others run through it.
 install -m 755 $L/native/bwrap-shim.sh /usr/local/bin/bwrap
+# pkexec (polkit, setuid) -> the same fake root as sudo.
+install -m 755 $L/native/pkexec-shim.sh /usr/local/bin/pkexec
 curl -fsSL -o /tmp/yay.tgz https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_aarch64.tar.gz
 echo "75bc500c8677d6760f51117ae0a61689e9cf165bea3c4800825a5c879d030726  /tmp/yay.tgz" | sha256sum -c --quiet
 tar xzf /tmp/yay.tgz -C /tmp && install -m 755 /tmp/yay_13.0.1_aarch64/yay /usr/local/bin/yay && rm -rf /tmp/yay*

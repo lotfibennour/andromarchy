@@ -46,9 +46,50 @@ static const char *main_program(void)
 // 7. Go programs: their raw syscalls bypass every wrapper here and fakechroot's; see go-syscalls.c.
 void go_syscalls_init(const char *program, const char *self_guest);
 
-__attribute__((constructor)) static void android_compat_init(void)
+// 7c. Chromium's sandbox (Chromium, Brave, Chrome, every Electron app) needs user namespaces or a setuid helper:
+//     neither exists for an Android app, and Chromium aborts rather than run without one. Instead of fixing browsers
+//     one by one, recognize any Chromium-based program by what it ships next to its binary (chrome-sandbox or
+//     chrome_crashpad_handler) and re-exec it once with --no-sandbox; it passes the switch on to its children.
+//     Same trade-off as Firefox's sandboxes (MOZ_DISABLE_*_SANDBOX in lotfix-run).
+static int has_file(const char *dir, const char *name)
 {
+    char p[4096];
+    snprintf(p, sizeof p, "%s/%s", dir, name);
+    return access(p, F_OK) == 0;
+}
+
+static void chromium_no_sandbox(int argc, char **argv)
+{
+    const char *prog = main_program();
+    if (!prog || !argv || strstr(prog, "crashpad") || strstr(prog, "chrome-sandbox"))
+        return;
+    char dir[4096];
+    snprintf(dir, sizeof dir, "%s", prog);
+    char *slash = strrchr(dir, '/');
+    if (!slash)
+        return;
+    *slash = 0;
+    if (!has_file(dir, "chrome-sandbox") && !has_file(dir, "chrome_crashpad_handler"))
+        return;
+    for (int i = 1; i < argc; i++)
+        if (strcmp(argv[i], "--no-sandbox") == 0 || strncmp(argv[i], "--type=", 7) == 0)
+            return; // already done, or a child process (the browser forwards the switch)
+    char **av = calloc(argc + 2, sizeof *av);
+    if (!av)
+        return;
+    av[0] = argv[0];
+    av[1] = "--no-sandbox";
+    for (int i = 1; i < argc; i++)
+        av[i + 1] = argv[i];
+    execv(prog, av); // through fakechroot and the loader; only returns on failure, then run as is
+    free(av);
+}
+
+__attribute__((constructor)) static void android_compat_init(int argc, char **argv, char **envp)
+{
+    (void)envp;
     rootfs_base = getenv("FAKECHROOT_BASE");
+    chromium_no_sandbox(argc, argv);
     if (program_invocation_name && program_invocation_name[0] == '/') {
         go_syscalls_init(program_invocation_name, main_program()); // both resolve the host path first
         // fakechroot's loader exec passes the HOST path as argv[0]. Programs that locate their files from it
