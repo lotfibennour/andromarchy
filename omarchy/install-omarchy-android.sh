@@ -135,6 +135,9 @@ grep -q 'kb_layout = "us,fr,ara"' ~/.config/hypr/input.lua ||
 grep -q 'osk-autoshow' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: on-screen keyboard follows text-field focus\no.exec_on_start("osk-autoshow")\n' >> ~/.config/hypr/autostart.lua
 # Android-style edit menu on a long touch press (native/longpress-menu.sh, installed by build-inside.sh).
+# Omarchy's first-run steps that need the session (dark GTK theme, primary paste, welcome notification), once.
+grep -q 'first-session.sh' ~/.config/hypr/autostart.lua ||
+  printf '\n-- Android/Andromarchy: first session (once)\no.exec_on_start("/opt/lotfix/first-session.sh")\n' >> ~/.config/hypr/autostart.lua
 grep -q 'andromarchy-longpress' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: edit menu on a long touch press\no.exec_on_start("andromarchy-longpress")\n' >> ~/.config/hypr/autostart.lua
 "$OMARCHY_PATH"/bin/omarchy-plugin-enable $OSK_ID || echo "on-screen keyboard: enable it with 'omarchy plugin enable $OSK_ID'"

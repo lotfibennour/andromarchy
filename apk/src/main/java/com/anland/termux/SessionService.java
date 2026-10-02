@@ -116,6 +116,19 @@ public class SessionService extends Service {
         String libDir = getApplicationInfo().nativeLibraryDir;
         String launcher = libDir + "/liblotfixrun.so";
 
+        // 0. First boot of this rootfs on this device (once; the locale part on each start): see first-boot.sh.
+        try {
+            ProcessBuilder pb = new ProcessBuilder(launcher, "/opt/lotfix/first-boot.sh");
+            pb.environment().clear();
+            pb.environment().putAll(archEnv(run, sock));
+            Process fb = pb.redirectErrorStream(true)
+                    .redirectOutput(new File(run, "first-boot.log")).start();
+            fb.getOutputStream().close();
+            fb.waitFor();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
         // 1. Display daemon: relays buffers and input between this app's display and Hyprland.
         spawn("anland", List.of(libDir + "/libanland.so", sock.getPath()), null);
 
@@ -145,6 +158,12 @@ public class SessionService extends Service {
         spawn("hyprland", List.of(launcher, "-c", "export PATH=/usr/share/omarchy/bin:$PATH; exec /usr/bin/Hyprland"), env);
     }
 
+    /** Android's language as a glibc locale name (fr_FR.UTF-8); C.UTF-8 when it has no country. */
+    static String androidLocale(Context ctx) {
+        java.util.Locale l = ctx.getResources().getConfiguration().getLocales().get(0);
+        return l.getCountry().isEmpty() ? "C.UTF-8" : l.getLanguage() + "_" + l.getCountry() + ".UTF-8";
+    }
+
     /** Environment for programs of the rootfs; lotfix-run sets the rest (loader, fakechroot, GPU...). */
     private Map<String, String> archEnv(File run, File sock) {
         Map<String, String> env = new java.util.HashMap<>(System.getenv());
@@ -152,6 +171,9 @@ public class SessionService extends Service {
         env.put("ARCH_EXCLUDE_EXTRA", run.getPath()); // sockets: real paths, not rewritten into the rootfs
         env.put("XDG_RUNTIME_DIR", run.getPath());
         env.put("TZ", java.util.TimeZone.getDefault().getID()); // glibc only knows /etc/localtime otherwise: UTC
+        env.put("LANG", androidLocale(this)); // Android's language (first-boot.sh compiles its locale)
+        env.put("ANDROMARCHY_UID", String.valueOf(android.os.Process.myUid()));
+        env.put("ANDROMARCHY_GID", String.valueOf(android.os.Process.myUid()));
         env.put("ANLAND_SOCKET", sock.getPath());
         env.put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + new File(run, "bus").getPath());
         env.put("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=" + new File(run, "system_bus").getPath());
