@@ -69,6 +69,9 @@ install -m 755 $L/native/bwrap-shim.sh /usr/local/bin/bwrap
 install -m 755 $L/native/pkexec-shim.sh /usr/local/bin/pkexec
 # No udev daemon on Android: udevadm control/trigger/settle succeed as no-ops.
 install -m 755 $L/native/udevadm-shim.sh /usr/local/bin/udevadm
+# The session's own system bus (SessionService) and the UPower stand-in it carries (battery from Android).
+install -m 644 $L/native/system-bus.conf /opt/lotfix/system-bus.conf
+install -m 755 $L/native/android-upower.py /usr/local/bin/android-upower
 # Edit menu on a long touch press (the app writes to run/longpress).
 install -m 755 $L/native/longpress-menu.sh /usr/local/bin/andromarchy-longpress
 curl -fsSL -o /tmp/yay.tgz https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_aarch64.tar.gz

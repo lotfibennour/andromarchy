@@ -6,7 +6,10 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
+import android.content.BroadcastReceiver;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
@@ -77,6 +80,9 @@ public class SessionService extends Service {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "andromarchy:session");
         wakeLock.acquire();
 
+        // Battery for the session's UPower stand-in (android-upower): apps cannot read /sys/class/power_supply.
+        registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+
         try {
             startSession();
         } catch (IOException e) {
@@ -107,6 +113,13 @@ public class SessionService extends Service {
         spawn("dbus", List.of(launcher, "-c", "exec dbus-daemon --session --nofork --nopidfile --address=unix:path="
                 + new File(run, "bus").getPath()), archEnv(run, sock));
 
+        // 2b. A "system" bus of our own (there is none for apps), for the services standing in for hardware ones.
+        new File(run, "system_bus").delete();
+        spawn("system-dbus", List.of(launcher, "-c", "exec dbus-daemon --config-file=/opt/lotfix/system-bus.conf"
+                + " --nofork --nopidfile --address=unix:path=" + new File(run, "system_bus").getPath()), archEnv(run, sock));
+        spawn("android-upower", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/system_bus\" ]"
+                + " && break; sleep 0.1; done; exec android-upower"), archEnv(run, sock));
+
         // 3. Sound: Hyprland's Anland backend creates PipeWire nodes, so the stack must exist (it reconnects anyway).
         for (String p : new String[] {"pipewire", "wireplumber", "pipewire-pulse"})
             spawn(p, List.of(launcher, "-c", "exec " + p), archEnv(run, sock));
@@ -127,10 +140,30 @@ public class SessionService extends Service {
         env.put("TZ", java.util.TimeZone.getDefault().getID()); // glibc only knows /etc/localtime otherwise: UTC
         env.put("ANLAND_SOCKET", sock.getPath());
         env.put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + new File(run, "bus").getPath());
+        env.put("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=" + new File(run, "system_bus").getPath());
         env.remove("WAYLAND_DISPLAY");
         env.remove("DISPLAY");
         return env;
     }
+
+    /** Android battery state -> run/battery ("<percent> <charging 0|1>"), read by android-upower. */
+    private final BroadcastReceiver battery = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context ctx, Intent i) {
+            int level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1), scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+            int status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL;
+            if (level < 0)
+                return;
+            File f = new File(runDir(ctx), "battery"), tmp = new File(runDir(ctx), ".battery");
+            try (java.io.FileWriter w = new java.io.FileWriter(tmp)) {
+                w.write((level * 100 / scale) + " " + (charging ? 1 : 0) + "\n");
+            } catch (IOException e) {
+                return;
+            }
+            tmp.renameTo(f); // atomic: the reader never sees half a line
+        }
+    };
 
     private void spawn(String name, List<String> cmd, Map<String, String> env) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(cmd);
@@ -146,6 +179,7 @@ public class SessionService extends Service {
 
     @Override
     public void onDestroy() {
+        unregisterReceiver(battery);
         for (Process p : processes)
             p.destroy();
         if (wakeLock != null && wakeLock.isHeld())
