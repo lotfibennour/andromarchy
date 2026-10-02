@@ -20,7 +20,7 @@ import java.util.Set;
 /**
  * The Android apps as a "Mobile Apps" submenu of Omarchy's menu: a managed block of entries in the user menu
  * extension (~/.config/omarchy/extensions/omarchy-menu.jsonc, reloaded live by the shell; the rest of the file is the
- * user's). Each entry runs android-request "split <package>": the app opens beside Andromarchy (see AndroidRequests).
+ * user's). Each entry runs android-request "float <package>": the app opens in a floating window (see AndroidRequests).
  * Kept in sync on install/removal.
  */
 final class AndroidApps extends BroadcastReceiver {
@@ -65,7 +65,7 @@ final class AndroidApps extends BroadcastReceiver {
         for (String[] a : apps)
             block.append("  \"mobile.").append(a[1].replace('.', '_')).append("\": {\"icon\": \"󰀲\", \"label\": ")
                     .append(json(a[0])).append(", \"description\": ").append(json(a[1]))
-                    .append(", \"action\": \"android-request split ").append(a[1]).append("\"},\n");
+                    .append(", \"action\": \"android-request float ").append(a[1]).append("\"},\n");
         block.append(END);
 
         try {
