@@ -5,7 +5,7 @@
 #   - the new one (being built): build-inside.sh, started directly with lotfix-run (an Android program: it cannot
 #     be exec'd from inside a rootfs, hence this driver in Android's shell).
 # Run as the app:   run-as andro.marchy sh build-rootfs-native.sh <repo dir in the app's files>
-# Output: files/build/out/lotfix-rootfs.tar.zst (+ .sha256), files/build/out/lotfix-hyprland-aarch64.tar.zst
+# Output: files/build/out/lotfix-rootfs.tar.gz (+ .sha256), files/build/out/lotfix-hyprland-aarch64.tar.zst
 set -eu
 APP=/data/data/andro.marchy/files
 R=$APP/rootfs                       # the installed rootfs (host path)
@@ -64,6 +64,6 @@ echo "== 3/3 pack (installed rootfs)"
 inside_installed "set -euo pipefail
   rm -rf $G/rootfs/tmp/lotfix $G/rootfs/var/cache/pacman/pkg/* $G/rootfs/etc/resolv.conf
   rm -f $G/rootfs/etc/machine-id && touch $G/rootfs/etc/machine-id # first-boot.sh makes this device's
-  tar --numeric-owner --hard-dereference -C $G/rootfs -I 'zstd -T0 -19' -cf $G/out/lotfix-rootfs.tar.zst .
-  cd $G/out && sha256sum lotfix-rootfs.tar.zst | tee lotfix-rootfs.tar.zst.sha256"
+  tar --numeric-owner --hard-dereference -C $G/rootfs -I 'gzip -6' -cf $G/out/lotfix-rootfs.tar.gz .
+  cd $G/out && sha256sum lotfix-rootfs.tar.gz | tee lotfix-rootfs.tar.gz.sha256"
 echo "done: $B/out"

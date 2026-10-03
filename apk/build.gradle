@@ -96,7 +96,3 @@ tasks.register("buildExecutables") {
 }
 tasks.named("preBuild") { dependsOn("buildExecutables") }
 
-dependencies {
-    // Pure-Java zstd decoder for the rootfs archive (first launch): no native library to package.
-    implementation "io.airlift:aircompressor:0.27"
-}

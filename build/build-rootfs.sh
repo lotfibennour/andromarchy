@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds the Lotfix rootfs (Arch Linux ARM + patched Hyprland + Omarchy + no-proot runtime) on an x86 PC,
-# through qemu-user binfmt (Debian/Ubuntu or WSL, as root). Output: out/lotfix-rootfs.tar.zst.
+# through qemu-user binfmt (Debian/Ubuntu or WSL, as root). Output: out/lotfix-rootfs.tar.gz.
 # The device-specific part (Android uid in /etc/passwd) is done on the tablet by native/setup-rootfs.sh.
 # Needs $OUT/lotfix-hyprland-aarch64.tar.zst from build-hyprland.sh, run natively on the tablet (hours under qemu).
 # Usage: sudo [LOTFIX_OUT=dir] build/build-rootfs.sh [workdir]
@@ -58,5 +58,5 @@ chroot "$R" /bin/bash /tmp/lotfix/inside.sh
 bash "$HERE/native/relativize-symlinks.sh" "$R" 2>/dev/null || true
 cleanup; trap - EXIT
 rm -rf "$R/tmp/lotfix" "$R/var/cache/pacman/pkg/"* "$R/etc/resolv.conf"
-tar --numeric-owner --hard-dereference -C "$R" -I 'zstd -T0 -19' -cf "$OUT/lotfix-rootfs.tar.zst" .
-sha256sum "$OUT/lotfix-rootfs.tar.zst" | tee "$OUT/lotfix-rootfs.tar.zst.sha256"
+tar --numeric-owner --hard-dereference -C "$R" -I 'gzip -6' -cf "$OUT/lotfix-rootfs.tar.gz" .
+sha256sum "$OUT/lotfix-rootfs.tar.gz" | tee "$OUT/lotfix-rootfs.tar.gz.sha256"

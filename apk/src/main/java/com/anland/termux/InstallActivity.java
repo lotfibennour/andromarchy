@@ -15,7 +15,7 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import io.airlift.compress.zstd.ZstdInputStream;
+import java.util.zip.GZIPInputStream;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -37,10 +37,10 @@ import java.util.Locale;
  */
 public class InstallActivity extends Activity {
     /** The rootfs built by build/build-rootfs.sh, published as a GitHub release asset. */
-    static final String ROOTFS_URL = "https://github.com/OWNER/andromarchy/releases/latest/download/lotfix-rootfs.tar.zst";
+    static final String ROOTFS_URL = "https://github.com/OWNER/andromarchy/releases/latest/download/lotfix-rootfs.tar.gz";
     /** A local copy in the app's external files dir (Android/data/andro.marchy/files/, no permission needed) is used
      *  instead when present: offline installs and tests. */
-    static final String LOCAL_NAME = "lotfix-rootfs.tar.zst";
+    static final String LOCAL_NAME = "lotfix-rootfs.tar.gz";
     private static final long NEEDED_BYTES = 12L << 30; // archive + extracted rootfs, with room for apps
 
     // {xkb layout, label}: the common ones; the first selected is the physical keyboard's.
@@ -157,7 +157,7 @@ public class InstallActivity extends Activity {
                     startActivity(new Intent(this, MainActivity.class));
                     finish();
                 });
-            } catch (Exception e) {
+            } catch (Throwable e) { // shown, never a crash: the user can retry
                 runOnUiThread(() -> {
                     status.setText("Install failed: " + e.getMessage() + "\nCheck the connection and retry.");
                     install.setEnabled(true);
@@ -203,7 +203,7 @@ public class InstallActivity extends Activity {
                 return n;
             }
         };
-        try (InputStream in = new ZstdInputStream(counting)) {
+        try (InputStream in = new GZIPInputStream(counting, 1 << 16)) {
             TarExtractor.extract(in, partial, entry -> {
                 long now = System.currentTimeMillis();
                 if (now - shown[0] < 200)
