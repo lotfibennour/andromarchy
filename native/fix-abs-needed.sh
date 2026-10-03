@@ -33,12 +33,21 @@ fix() {
     case $d in /*) grep -qxF "$d" /etc/ld.so.conf.d/zz-abs-needed.conf 2>/dev/null || echo "$d" >> /etc/ld.so.conf.d/zz-abs-needed.conf ;; esac
   done
 }
+# Which files need fixing: ONE readelf over all of them (with an extra /dev/null so it always prints "File:"
+# headers), not several programs per file: a package of thousands of files took minutes, each program start costing
+# tens of milliseconds under the Android runtime.
+needs_fix() {
+  grep -v '^$' | while read -r f; do [ -f "$f" ] && [ ! -L "$f" ] && printf '%s\n' "$f"; done |
+    xargs -r -d '\n' readelf -d /dev/null 2>/dev/null |
+    awk '/^File: / { f = substr($0, 7); next }
+         /\(NEEDED\).*\[\// || /\((RUNPATH|RPATH)\).*[[:]\// { if (f != "" && !seen[f]++) print f }'
+}
 
 if [ "${1:-}" = --all ]; then
-  find /usr/bin /usr/lib -xdev -type f \( -perm -u+x -o -name '*.so*' \) -size +1k 2>/dev/null | while read -r f; do fix "$f"; done
+  find /usr/bin /usr/lib -xdev -type f \( -perm -u+x -o -name '*.so*' \) -size +1k 2>/dev/null
 elif [ $# -gt 0 ]; then
-  for f in "$@"; do fix "$f"; done
+  printf '%s\n' "$@"
 else
-  while read -r p; do fix "/$p"; done
-fi
+  sed 's|^|/|' # from the pacman hook: paths relative to /
+fi | needs_fix | while read -r f; do fix "$f"; done
 exit 0
