@@ -34,5 +34,6 @@ rc=$?
 # ponytail: two sudo running at the same time each save their own view, the last one wins; add a lock if that bites.
 pid=${key_pid##*:}
 kill "$pid" 2>/dev/null
-while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done
+for i in $(seq 100); do kill -0 "$pid" 2>/dev/null || break; sleep 0.05; done
+kill -9 "$pid" 2>/dev/null # saved, but some faked never exit on SIGTERM: sudo hung there
 exit $rc

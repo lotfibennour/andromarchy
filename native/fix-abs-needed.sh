@@ -40,7 +40,7 @@ needs_fix() {
   grep -v '^$' | while read -r f; do [ -f "$f" ] && [ ! -L "$f" ] && printf '%s\n' "$f"; done |
     xargs -r -d '\n' readelf -d /dev/null 2>/dev/null |
     awk '/^File: / { f = substr($0, 7); next }
-         /\(NEEDED\).*\[\// || /\((RUNPATH|RPATH)\).*[[:]\// { if (f != "" && !seen[f]++) print f }'
+         /\(NEEDED\).*\[\// || /\((RUNPATH|RPATH)\).*(\[|:)\// { if (f != "" && !seen[f]++) print f }'
 }
 
 if [ "${1:-}" = --all ]; then
