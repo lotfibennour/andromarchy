@@ -174,7 +174,9 @@ public class InstallActivity extends Activity {
         File rootfs = SessionService.rootfs(this);
         File partial = new File(rootfs.getPath() + ".partial");
         deleteTree(partial); // a previous attempt that stopped halfway
-        File local = new File(getExternalFilesDir(null), LOCAL_NAME);
+        File external = new File(getExternalFilesDir(null), LOCAL_NAME);
+        // or in files/ (adb run-as, or a rootfs build on the device)
+        final File local = external.canRead() ? external : new File(getFilesDir(), LOCAL_NAME);
         InputStream raw;
         long total;
         if (local.canRead()) {
