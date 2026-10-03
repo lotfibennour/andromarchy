@@ -148,8 +148,12 @@ public class SessionService extends Service {
                 + " && break; sleep 0.1; done; exec android-upower"), archEnv(run, sock));
 
         // 3. Sound: Hyprland's Anland backend creates PipeWire nodes, so the stack must exist (it reconnects anyway).
-        for (String p : new String[] {"pipewire", "wireplumber", "pipewire-pulse"})
-            spawn(p, List.of(launcher, "-c", "exec " + p), archEnv(run, sock));
+        //    wireplumber and pipewire-pulse give up when PipeWire is not up yet (a cold first start): they wait for its
+        //    socket.
+        spawn("pipewire", List.of(launcher, "-c", "exec pipewire"), archEnv(run, sock));
+        for (String p : new String[] {"wireplumber", "pipewire-pulse"})
+            spawn(p, List.of(launcher, "-c", "for i in $(seq 100); do [ -S \"$XDG_RUNTIME_DIR/pipewire-0\" ] && break;"
+                    + " sleep 0.1; done; exec " + p), archEnv(run, sock));
 
         // 4. Hyprland with Omarchy. It waits for this app's display to connect (MainActivity).
         Map<String, String> env = archEnv(run, sock);
