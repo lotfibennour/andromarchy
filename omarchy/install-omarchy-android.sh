@@ -14,7 +14,9 @@ pacman -S --noconfirm --needed \
   ttf-jetbrains-mono-nerd noto-fonts noto-fonts-emoji woff2-font-awesome \
   foot alacritty xdg-terminal-exec fastfetch starship btop eza bat fzf zoxide ripgrep fd \
   wl-clipboard grim slurp jq gum socat hyprpicker hyprsunset imv mpv tmux neovim lua51 \
-  gnome-themes-extra libnotify inotify-tools imagemagick
+  gnome-themes-extra libnotify inotify-tools imagemagick \
+  pipewire pipewire-pulse pipewire-alsa pipewire-audio wireplumber xdg-desktop-portal xdg-desktop-portal-gtk \
+  xdg-user-dirs gvfs
 
 rm -rf "$OMARCHY_PATH"
 cp -a "$SRC" "$OMARCHY_PATH"

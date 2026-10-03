@@ -4,6 +4,8 @@
 mark=/root/.local/state/andromarchy/first-session.done
 [ -f "$mark" ] && exit 0
 sleep 5 # the shell's notification service comes up with the bar
+# The on-screen keyboard plugin (cloned at build time): enabling needs the running shell.
+OMARCHY_PATH=/usr/share/omarchy /usr/share/omarchy/bin/omarchy-plugin-enable io.github.abdxdev.onscreen-keyboard
 gsettings set org.gnome.desktop.interface gtk-theme "Adwaita-dark"
 gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
 gsettings set org.gnome.desktop.interface icon-theme "Yaru-blue"
