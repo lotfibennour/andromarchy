@@ -381,6 +381,9 @@ def main():
         libpath = ":".join(first + [T + p for p in dict.fromkeys(libdirs)] + last)
         if gl:
             env.update(host_gl())
+            # Our KGSL Mesa reports MESA_query_renderer "accelerated" = false (no DRM device behind it): Firefox-based
+            # apps (Zotero, Thunderbird) read that as software and turn GPU rendering off. Force it.
+            env.setdefault("MOZ_ACCELERATED", "1")
         compat = real("/opt/lotfix/android-compat.so")
         fc = real("/usr/lib/libfakeroot/fakechroot/libfakechroot.so")
         for k in ("ANLAND", "ANLAND_NO_DRM_DEVICE", "TURNIP_KMD", "FD_FORCE_KGSL", "MESA_LOADER_DRIVER_OVERRIDE",
