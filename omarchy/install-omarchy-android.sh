@@ -24,6 +24,10 @@ cp -a "$SRC" "$OMARCHY_PATH"
 grep -rlIZ $'\r' "$OMARCHY_PATH" | xargs -0 -r sed -i 's/\r$//' || true # none in a Linux clone: grep exits 1
 # ttfx comes from the x86-only Omarchy repo; without it the screensaver loops on "command not found".
 sed -i '/^trap exit_screensaver/a command -v ttfx >/dev/null || exit_screensaver' "$OMARCHY_PATH/bin/omarchy-screensaver"
+# ...and the idle service's launcher would still open its full-screen terminal for that instant exit: a black blink
+# every idle period. Don't launch it at all.
+sed -i '0,/^pgrep -f .\[o\]rg.omarchy.screensaver/s//# Android\/ARM: no ttfx, no screensaver (its window opened and closed at once: a black blink)\ncommand -v ttfx >\/dev\/null || exit 0\n&/' \
+  "$OMARCHY_PATH/bin/omarchy-launch-screensaver"
 
 # No journald on Android: omarchy-launch-shell runs the shell through systemd-cat.
 cat > /usr/local/bin/systemd-cat <<'EOF'
