@@ -77,7 +77,7 @@
 <script>
   // A (Java, SplashScreen): info() once, then state() = {step, steps, msg} from the session's real progress.
   const info = JSON.parse(A.info());
-  ver.textContent = 'v' + info.version; kernel.textContent = info.kernel; mem.textContent = info.mem; soc.textContent = info.soc;
+  ver.textContent = 'v' + info.version; kernel.textContent = info.kernel.split('-').slice(0, 2).join('-'); mem.textContent = info.mem; soc.textContent = info.soc;
   let shown = '';
   function tick() {
     const s = JSON.parse(A.state());
