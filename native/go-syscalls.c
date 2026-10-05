@@ -356,7 +356,9 @@ static int is_go_binary(const char *path)
             size_t len = strsec.sh_size < sizeof names ? strsec.sh_size : sizeof names;
             if (raw(SYS_pread64, fd, names, len, strsec.sh_offset) == (long)len)
                 for (int i = 0; i < eh.e_shnum && !go; i++)
-                    if (sh[i].sh_name < len && strcmp(names + sh[i].sh_name, ".go.buildinfo") == 0)
+                    // Bun executables (Claude Code, opencode...) also issue inline syscalls from their own text (Zig)
+                    if (sh[i].sh_name < len && (strcmp(names + sh[i].sh_name, ".go.buildinfo") == 0 ||
+                                                strcmp(names + sh[i].sh_name, ".bun") == 0))
                         go = 1;
         }
     }

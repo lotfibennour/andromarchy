@@ -164,7 +164,7 @@ int main(int argc, char **argv)
     snprintf(libpath, sizeof libpath, "%s%s%s:%s", lx && *lx ? lx : "", lx && *lx ? ":" : "", G, libdirs);
     setenv("LD_LIBRARY_PATH", libpath, 1); // same libs for the first process (--library-path) and its children
 
-    setenv("PATH", "/usr/local/bin:/usr/bin", 1);
+    setenv("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin", 1);
     setenv("HOME", "/root", 1);
     setenv("USER", "root", 1); // scripts expect it (set -u installers); same user as HOME
     setenv("LOGNAME", "root", 1);
