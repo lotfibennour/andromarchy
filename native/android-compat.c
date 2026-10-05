@@ -1467,12 +1467,55 @@ static const char *relative_target(const char *target, int dirfd, const char *li
     return out;
 }
 
+// realpath on an excluded host path (the session's run dir): fakechroot resolves it component by component inside the
+// rootfs, which has no /data, and fails. Quickshell canonicalizes its run dir: empty paths, no instance symlinks, so
+// `quickshell kill` found nothing and omarchy-restart-shell stacked a second bar.
+// ponytail: returns the path as given (no symlink or ".." resolution); the run dir has neither in practice.
+static char *excluded_realpath(const char *path, char *resolved)
+{
+    char t[4096], probe[4096];
+    struct stat st;
+    if (!path || path[0] != '/' || !rootfs_base || strlen(path) >= sizeof t)
+        return (char *)-1;
+    snprintf(t, sizeof t, "%s", path);
+    if (gs_translate(t, probe) != t) // a rootfs path: fakechroot's
+        return (char *)-1;
+    if (stat(path, &st) < 0)
+        return NULL;
+    size_t n = strlen(path);
+    while (n > 1 && path[n - 1] == '/')
+        n--;
+    if (!resolved && !(resolved = malloc(PATH_MAX)))
+        return NULL;
+    snprintf(resolved, PATH_MAX, "%.*s", (int)n, path);
+    return resolved;
+}
+
+char *realpath(const char *path, char *resolved)
+{
+    static char *(*next)(const char *, char *);
+    char *r = excluded_realpath(path, resolved);
+    if (r != (char *)-1)
+        return r;
+    if (!next)
+        next = dlsym(RTLD_NEXT, "realpath");
+    return next(path, resolved);
+}
+
+char *__realpath_chk(const char *path, char *resolved, size_t len)
+{
+    (void)len;
+    return realpath(path, resolved);
+}
+
 int symlinkat(const char *target, int dirfd, const char *linkpath)
 {
     static int (*next)(const char *, int, const char *);
     char rel[8192];
     if (!next)
         next = dlsym(RTLD_NEXT, "symlinkat");
+    if (linkpath && linkpath[0] == '/') // the kernel ignores dirfd then; fakechroot may not (quickshell passes 0)
+        dirfd = AT_FDCWD;
     return next(relative_target(target, dirfd, linkpath, rel), dirfd, linkpath);
 }
 
