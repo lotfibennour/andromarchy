@@ -344,6 +344,27 @@ static int reopen_own_memfd(const char *path)
 #include <sys/utsname.h>
 #include <time.h>
 
+// /sys files a desktop reads that apps are denied or that Android lacks: the NUMA node list, and the machine's
+// identity (DMI: fastfetch, "About" panels, hardware databases) from Android's Build values, exported by the app.
+static int fake_sys(const char *p, char *buf, size_t sz)
+{
+    if (strcmp(p, "devices/system/node/online") == 0)
+        return snprintf(buf, sz, "0\n");
+    const char *dmi = strncmp(p, "class/dmi/id/", 13) == 0         ? p + 13
+                      : strncmp(p, "devices/virtual/dmi/id/", 23) == 0 ? p + 23
+                                                                     : NULL;
+    const char *vendor = getenv("ANDROMARCHY_VENDOR"), *model = getenv("ANDROMARCHY_MODEL");
+    if (!dmi || !vendor || !model)
+        return -1;
+    if (!strcmp(dmi, "sys_vendor") || !strcmp(dmi, "board_vendor") || !strcmp(dmi, "chassis_vendor"))
+        return snprintf(buf, sz, "%s\n", vendor);
+    if (!strcmp(dmi, "product_name") || !strcmp(dmi, "board_name") || !strcmp(dmi, "product_family"))
+        return snprintf(buf, sz, "%s\n", model);
+    if (!strcmp(dmi, "chassis_type"))
+        return snprintf(buf, sz, "30\n"); // SMBIOS: tablet
+    return -1;
+}
+
 // Contents for a denied /proc file, or -1 to pass the path through.
 static int fake_proc(const char *p, char *buf, size_t sz)
 {
@@ -365,8 +386,24 @@ static int fake_proc(const char *p, char *buf, size_t sz)
         {"net/tcp6", "  sl  local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"},
         {"net/udp6", "  sl  local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"},
         {"net/if_inet6", ""}, {"partitions", "major minor  #blocks  name\n\n"}, {"diskstats", ""}, {"vmstat", ""},
-        {"zoneinfo", ""}, {"cmdline", "\n"}, {"modules", ""}, {"interrupts", ""}, {"pressure/cpu", ""},
+        {"zoneinfo", ""}, {"cmdline", "\n"}, {"modules", ""}, {"interrupts", ""},
+        // Kernel limits programs size themselves from (tools/paths-probe.py: denied to apps): stock Linux values.
+        {"sys/kernel/threads-max", "126000\n"}, {"sys/kernel/cap_last_cap", "40\n"}, {"sys/kernel/ngroups_max", "65536\n"},
+        {"sys/kernel/yama/ptrace_scope", "0\n"}, {"sys/vm/max_map_count", "65530\n"}, {"sys/vm/swappiness", "60\n"},
+        {"sys/fs/nr_open", "1048576\n"}, {"sys/fs/inotify/max_user_watches", "65536\n"},
+        {"sys/fs/inotify/max_user_instances", "128\n"}, {"sys/net/core/somaxconn", "4096\n"},
+        {"sys/net/ipv4/ip_local_port_range", "32768\t60999\n"}, {"sys/net/ipv6/conf/all/disable_ipv6", "0\n"},
+        {"pressure/cpu", "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"},
+        {"pressure/memory", "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"},
+        {"pressure/io", "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"},
+        {"buddyinfo", ""}, {"crypto", ""}, {"misc", ""}, {"net/snmp", ""},
+        {"devices", "Character devices:\n  1 mem\n  5 /dev/tty\n  5 /dev/ptmx\n136 pts\n\nBlock devices:\n"},
+        {"net/unix", "Num       RefCount Protocol Flags    Type St Inode Path\n"},
+        {"net/wireless", "Inter-| sta-|   Quality        |   Discarded packets               | Missed | WE\n"
+                         " face | tus | link level noise |  nwid  crypt   frag  retry   misc | beacon | 22\n"},
     };
+    if (p && strncmp(p, "/sys/", 5) == 0)
+        return fake_sys(p + 5, buf, sz);
     if (!p || strncmp(p, "/proc/", 6) != 0)
         return -1;
     p += 6;
@@ -688,7 +725,7 @@ static int linked_copy(const char *path)
             FIX_TYPE(st, AT_FDCWD, path, strncmp(#name, "lstat", 5) == 0 ? AT_SYMLINK_NOFOLLOW : 0);                   \
         if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
             st->st_nlink = 2;                                                                                          \
-        return r < 0 && errno == EACCES && IS_UPTIME(path) ? next("/proc/self/stat", st) : r;                          \
+        return r < 0 && (errno == EACCES || errno == ENOENT) && IS_UPTIME(path) ? next("/proc/self/stat", st) : r;                          \
     }
 STAT_WRAP(stat, struct stat)
 STAT_WRAP(stat64, struct stat64)
@@ -707,7 +744,7 @@ STAT_WRAP(lstat64, struct stat64)
             FIX_TYPE(st, dirfd, path, flags);                                                                          \
         if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
             st->st_nlink = 2;                                                                                          \
-        return r < 0 && errno == EACCES && IS_UPTIME(path) ? next(AT_FDCWD, "/proc/self/stat", st, flags) : r;         \
+        return r < 0 && (errno == EACCES || errno == ENOENT) && IS_UPTIME(path) ? next(AT_FDCWD, "/proc/self/stat", st, flags) : r;         \
     }
 FSTATAT_WRAP(fstatat, struct stat)
 FSTATAT_WRAP(fstatat64, struct stat64)
@@ -720,7 +757,7 @@ int access(const char *path, int mode)
     char shm_[512];
     path = dev_shm(path, shm_);
     int r = next(path, mode);
-    return r < 0 && errno == EACCES && IS_UPTIME(path) && !(mode & (W_OK | X_OK)) ? 0 : r;
+    return r < 0 && (errno == EACCES || errno == ENOENT) && IS_UPTIME(path) && !(mode & (W_OK | X_OK)) ? 0 : r;
 }
 
 // 3b. Hard links: Android's SELinux denies them to apps (EACCES). X servers create their lock file by linking a

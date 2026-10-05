@@ -192,6 +192,8 @@ public class SessionService extends Service {
         env.put("ANDROMARCHY_UID", String.valueOf(android.os.Process.myUid()));
         env.put("ANDROMARCHY_GID", String.valueOf(android.os.Process.myUid()));
         env.put("ANLAND_SOCKET", sock.getPath());
+        env.put("ANDROMARCHY_VENDOR", android.os.Build.MANUFACTURER); // the machine's identity (DMI) for Linux tools
+        env.put("ANDROMARCHY_MODEL", android.os.Build.MODEL);
         env.put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + new File(run, "bus").getPath());
         env.put("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=" + new File(run, "system_bus").getPath());
         // Hardware video: VA-API through Mesa's termuxva bridge to the termux-va daemon (MediaCodec), when the
