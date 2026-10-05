@@ -107,6 +107,8 @@ install -m 644 $L/native/system-bus.conf /opt/lotfix/system-bus.conf
 install -m 755 $L/native/android-upower.py /usr/local/bin/android-upower
 install -m 755 $L/native/android-nm.py /usr/local/bin/android-nm
 # The other services a desktop expects on D-Bus (tools/dbus-probe.sh): system and session stand-ins.
+install -m 755 $L/native/bwrap-shim.sh -D /usr/local/libexec/bwrap-legacy
+install -m 755 $L/native/bwrap-flatpak.py /usr/local/bin/bwrap  # Flatpak apps (trees + runtime glibc); others: legacy
 install -m 755 $L/native/android-system-services.py /usr/local/bin/android-system-services
 install -m 755 $L/native/android-session-services.py /usr/local/bin/android-session-services
 # Linux -> Android requests (Wi-Fi panel, launching Android apps): the app watches run/android-request.
