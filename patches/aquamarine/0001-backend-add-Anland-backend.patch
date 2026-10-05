@@ -1543,10 +1543,10 @@ index 0000000..5acf1f1
 +#endif
 diff --git a/src/backend/anland/anland_camera.c b/src/backend/anland/anland_camera.c
 new file mode 100644
-index 0000000..6c90429
+index 0000000..6801e55
 --- /dev/null
 +++ b/src/backend/anland/anland_camera.c
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,338 @@
 +#define _GNU_SOURCE
 +#include "anland_camera.h"
 +
@@ -1713,7 +1713,14 @@ index 0000000..6c90429
 +    if (b) {
 +        struct spa_data *d = &b->buffer->datas[0];
 +        if (d->data && m.a == k->w && m.b == k->h && bytes <= d->maxsize && bytes <= k->slot_bytes) {
-+            memcpy(d->data, k->shm + (size_t)m.slot * k->slot_bytes, bytes);
++            /* NV21 (Y, then V,U interleaved) -> I420 (Y, U, V planes): WebRTC/Chromium rejects NV21. */
++            const uint8_t *src = k->shm + (size_t)m.slot * k->slot_bytes, *vu = src + (size_t)k->w * k->h;
++            uint8_t       *dst = d->data, *u = dst + (size_t)k->w * k->h, *v = u + (size_t)k->w * k->h / 4;
++            memcpy(dst, src, (size_t)k->w * k->h);
++            for (size_t i = 0; i < (size_t)k->w * k->h / 4; i++) {
++                v[i] = vu[2 * i];
++                u[i] = vu[2 * i + 1];
++            }
 +            d->chunk->offset = 0;
 +            d->chunk->size   = (uint32_t)bytes;
 +            d->chunk->stride = (int32_t)k->w;
@@ -1771,7 +1778,7 @@ index 0000000..6c90429
 +    struct spa_pod_builder bld = SPA_POD_BUILDER_INIT(buf, sizeof buf);
 +    const struct spa_pod  *fmt = spa_pod_builder_add_object(
 +        &bld, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat, SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video),
-+        SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw), SPA_FORMAT_VIDEO_format, SPA_POD_Id(SPA_VIDEO_FORMAT_NV21),
++        SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw), SPA_FORMAT_VIDEO_format, SPA_POD_Id(SPA_VIDEO_FORMAT_I420),
 +        SPA_FORMAT_VIDEO_size, SPA_POD_Rectangle(&SPA_RECTANGLE(k->w, k->h)), SPA_FORMAT_VIDEO_framerate,
 +        SPA_POD_Fraction(&SPA_FRACTION(FPS, 1)));
 +    pw_stream_connect(k->stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_STREAM_FLAG_DRIVER | PW_STREAM_FLAG_MAP_BUFFERS, &fmt, 1);
@@ -1880,7 +1887,7 @@ index 0000000..6c90429
 +}
 diff --git a/src/backend/anland/anland_camera.h b/src/backend/anland/anland_camera.h
 new file mode 100644
-index 0000000..f3c8e9e
+index 0000000..3d5f4c0
 --- /dev/null
 +++ b/src/backend/anland/anland_camera.h
 @@ -0,0 +1,29 @@
@@ -1894,7 +1901,7 @@ index 0000000..f3c8e9e
 + * The consumer (the Android app, camera_service.c) hands over its camera service fds
 + * after a resources request: { ctrl, stream_0, .., stream_{N-1} }. A camera is only
 + * opened on Android while some Linux app actually streams from its node.
-+ * Frames arrive as NV21 in a shared-memory double buffer (see protocol.h, CAM_*).
++ * Frames arrive as NV21 in a shared-memory double buffer and are offered as I420 (what every app takes).
 + */
 +
 +#ifdef __cplusplus
