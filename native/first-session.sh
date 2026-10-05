@@ -10,7 +10,5 @@ gsettings set org.gnome.desktop.interface gtk-theme "Adwaita-dark"
 gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
 gsettings set org.gnome.desktop.interface icon-theme "Yaru-blue"
 gsettings set org.gnome.desktop.interface gtk-enable-primary-paste true
-omarchy-notification-send -u critical "Learn Keybindings" \
-  $'Super + K for cheatsheet.\nSuper + Space for Omarchy Menu.\nMobile Apps: your Android apps.' \
-  --exec omarchy-menu-keybindings
+# (the welcome notification is Omarchy's own first run's: install-omarchy-android.sh adds the Mobile Apps line)
 mkdir -p "${mark%/*}" && touch "$mark"

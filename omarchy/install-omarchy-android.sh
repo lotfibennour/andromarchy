@@ -81,6 +81,15 @@ chmod +x /usr/local/bin/systemd-cat
 grep -rl 'eDP|LVDS|DSI)' "$OMARCHY_PATH"/bin "$OMARCHY_PATH"/shell | xargs -r sed -i 's/(eDP|LVDS|DSI)/(eDP|LVDS|DSI|ANLAND)/g'
 pacman -S --noconfirm --needed brightnessctl
 
+# First run (omarchy-provision-first-run, each login until every step succeeds): its user units are hardware ones
+# (Bluetooth agent, sleep lock, monitor recovery, fcitx5, crash watch) that a normal install copies in; enabling them
+# here always failed, so first-run retried, and its welcome notifications piled up, at every start. Nothing to enable.
+printf '#!/bin/bash\n# Android/Andromarchy: no hardware user units to enable (see install-omarchy-android.sh)\nexit 0\n' \
+  > "$OMARCHY_PATH/install/user/first-run/enable-user-units.sh"
+# Its welcome notification also points to the Android apps.
+sed -i 's|Super + Space for Omarchy Menu\.'"'"'|Super + Space for Omarchy Menu.\\nApps > Mobile Apps: your Android apps.'"'"'|' \
+  "$OMARCHY_PATH/install/user/first-run/welcome.sh"
+
 # Apps menu: submenus (Mobile Apps, written by the app as apps.mobile) before the applications; Omarchy sorts the
 # whole list alphabetically.
 grep -q 'Andromarchy: submenus first' "$OMARCHY_PATH"/shell/plugins/menu/Menu.qml ||
