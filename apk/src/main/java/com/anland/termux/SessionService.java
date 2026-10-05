@@ -207,6 +207,10 @@ public class SessionService extends Service {
         env.put("ANDROMARCHY_UID", String.valueOf(android.os.Process.myUid()));
         env.put("ANDROMARCHY_GID", String.valueOf(android.os.Process.myUid()));
         env.put("ANLAND_SOCKET", sock.getPath());
+        // Flatpak apps' launchers (exported .desktop files, icons): a normal login gets these from
+        // /etc/profile.d/flatpak.sh or systemd's environment generator; this session starts from the app.
+        env.put("XDG_DATA_DIRS", "/root/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share"
+                + ":/usr/local/share:/usr/share");
         env.put("ANDROMARCHY_VENDOR", android.os.Build.MANUFACTURER); // the machine's identity (DMI) for Linux tools
         env.put("ANDROMARCHY_MODEL", android.os.Build.MODEL);
         env.put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + new File(run, "bus").getPath());
