@@ -233,6 +233,34 @@ def runtime_glibc(tree):
     return d
 
 
+HOST_GL = "/opt/lotfix/host-gl"
+
+
+def host_gl():
+    """Our Mesa (KGSL: the Adreno through the only GPU interface Android gives apps) for Flatpak apps, instead of
+    their runtime's (Flathub's upstream Mesa: no GPU here, it fell back to llvmpipe on the CPU). A dir of links to our
+    EGL/GBM/gallium/Vulkan libraries, put first on the app's library path, and a Vulkan ICD naming our driver by its
+    real path. ponytail: our Mesa is built against Arch's libraries; ANDROMARCHY_FLATPAK_GL=runtime falls back."""
+    if not os.path.exists(HOST_GL + "/freedreno_icd.json"):
+        os.makedirs(HOST_GL, exist_ok=True)
+        for n in os.listdir("/usr/lib"):
+            if n.startswith(("libEGL_mesa.so", "libGLX_mesa.so", "libgallium-", "libgbm.so", "libvulkan_freedreno")):
+                link = os.path.join(HOST_GL, n)
+                if not os.path.lexists(link):
+                    os.symlink(os.path.relpath("/usr/lib/" + n, HOST_GL), link)
+        with open(HOST_GL + "/freedreno_icd.json", "w") as f:
+            json.dump({"ICD": {"api_version": "1.4.359", "library_arch": "64",
+                               "library_path": real("/usr/lib/libvulkan_freedreno.so")},
+                       "file_format_version": "1.0.1"}, f)
+    return {
+        "__EGL_VENDOR_LIBRARY_FILENAMES": real("/usr/share/glvnd/egl_vendor.d/50_mesa.json"),
+        "LIBGL_DRIVERS_PATH": real("/usr/lib/dri"),
+        "GBM_BACKENDS_PATH": real("/usr/lib/gbm"),
+        "VK_DRIVER_FILES": real(HOST_GL + "/freedreno_icd.json"),
+        "VK_ICD_FILENAMES": real(HOST_GL + "/freedreno_icd.json"),
+    }
+
+
 def ld_conf_dirs(tree):
     """Library dirs named by the container's ld.so.conf files (Flatpak passes them as data)."""
     dirs, todo, seen = [], [tree.here("/etc/ld.so.conf")], set()
@@ -346,7 +374,13 @@ def main():
         T = real(tree.path)
         libdirs = [p for p in (env.get("LD_LIBRARY_PATH", "").split(":") + ld_conf_dirs(tree)
                                + ["/usr/lib/aarch64-linux-gnu", "/usr/lib"]) if p.startswith("/")]
-        libpath = ":".join([real(glibc)] + [T + p for p in dict.fromkeys(libdirs)])
+        gl = os.environ.get("ANDROMARCHY_FLATPAK_GL", env.get("ANDROMARCHY_FLATPAK_GL", "host")) != "runtime"
+        first = [real(glibc)] + ([real(HOST_GL)] if gl else [])
+        # last: our own /usr/lib, only for what our Mesa needs and the runtime lacks (its LLVM, ...)
+        last = [ROOTFS + "/usr/lib"] if gl else []
+        libpath = ":".join(first + [T + p for p in dict.fromkeys(libdirs)] + last)
+        if gl:
+            env.update(host_gl())
         compat = real("/opt/lotfix/android-compat.so")
         fc = real("/usr/lib/libfakeroot/fakechroot/libfakechroot.so")
         for k in ("ANLAND", "ANLAND_NO_DRM_DEVICE", "TURNIP_KMD", "FD_FORCE_KGSL", "MESA_LOADER_DRIVER_OVERRIDE",
