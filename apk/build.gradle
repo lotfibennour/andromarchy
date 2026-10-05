@@ -68,12 +68,16 @@ android {
 }
 
 // Executables the app runs, built with the NDK and shipped as lib*.so so that Android extracts them to the
-// executable nativeLibraryDir: the Anland display daemon and lotfix-run (the Arch launcher, ../native/launcher).
+// executable nativeLibraryDir: the Anland display daemon, lotfix-run (the Arch launcher, ../native/launcher) and
+// the termux-va video daemon. Entries starting with "-" are compiler/linker flags.
 // 16 KB-aligned segments for Android 15+ devices with 16 KB pages.
 def jniOut = file("src/main/jniLibs/arm64-v8a")
 def executables = [
     "libanland.so"   : ["native/anland/anland.c", "native/anland/common/socket_utils.c"],
     "liblotfixrun.so": ["../native/launcher/lotfix-run.c"],
+    // termux-va (lfdevs, GPL-3.0): MediaCodec hardware video for the VA-API of Mesa's termuxva bridge
+    "libtermuxva.so" : ["../third_party/termux-va/daemon/termux-va.c", "-std=c11",
+                        "-I../third_party/termux-va/common", "-lmediandk", "-llog", "-landroid"],
 ]
 tasks.register("buildExecutables") {
     inputs.files(executables.values().flatten())
@@ -87,7 +91,7 @@ tasks.register("buildExecutables") {
         jniOut.mkdirs()
         executables.each { name, srcs ->
             def proc = ([clang, "-O2", "-Wall", "-pie", "-Wl,-z,max-page-size=16384",
-                         "-o", new File(jniOut, name).path] + srcs.collect { file(it).path }).execute()
+                         "-o", new File(jniOut, name).path] + srcs.collect { it.startsWith("-I") ? "-I" + file(it.substring(2)).path : it.startsWith("-") ? it : file(it).path }).execute()
             proc.waitForProcessOutput(System.out, System.err)
             if (proc.exitValue() != 0)
                 throw new GradleException("NDK build of ${name} failed")

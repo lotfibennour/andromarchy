@@ -83,14 +83,35 @@ static void chromium_no_sandbox(int argc, char **argv)
     for (int i = 1; i < argc && kgsl; i++)
         if (strncmp(argv[i], "--render-node-override", 22) == 0)
             kgsl = 0; // the user's own choice
-    char **av = calloc(argc + 3, sizeof *av);
+    // Hardware video (VA-API -> Mesa's termuxva bridge -> termux-va/MediaCodec): Chromium opens libva on the KGSL
+    // node, which libdrm only accepts through Mesa's DRM shim (LD_PRELOAD, inherited by the GPU process).
+    char shim[4096];
+    snprintf(shim, sizeof shim, "%s/usr/lib/libtva_drm_shim_wayland.so", rootfs_base ? rootfs_base : "");
+    // ponytail: opt-in (ANDROMARCHY_CHROMIUM_VAAPI=1) until it plays cleanly: YouTube in Brave showed green frames
+    // and stalls even at 720p (copies per frame + frames late), while ffmpeg/mpv decode fine through the same bridge.
+    int va = kgsl && rootfs_base && getenv("ANDROMARCHY_CHROMIUM_VAAPI") && getenv("LIBVA_DRIVER_NAME") &&
+             access("/usr/lib/libtva_drm_shim_wayland.so", R_OK) == 0; // guest path: fakechroot
+    if (va) {
+        const char *pre = getenv("LD_PRELOAD");
+        char *np;
+        if (asprintf(&np, "%s%s%s", pre ? pre : "", pre ? ":" : "", shim) >= 0)
+            setenv("LD_PRELOAD", np, 1);
+    }
+    char **av = calloc(argc + 5, sizeof *av);
     if (!av)
         return;
     int n = 0;
     av[n++] = argv[0];
     av[n++] = "--no-sandbox";
-    if (kgsl)
+    if (kgsl) {
         av[n++] = "--render-node-override=/dev/kgsl-3d0";
+        // Decoded video in NV12 GBM buffers on KGSL showed green stripes (a row layout Chromium does not expect):
+        // video frames go to ordinary textures, everything else stays on the GPU path.
+        av[n++] = "--disable-gpu-memory-buffer-video-frames";
+    }
+    if (va)
+        av[n++] = "--enable-features=AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,"
+                  "VaapiVideoDecoder,VaapiIgnoreDriverChecks";
     for (int i = 1; i < argc; i++)
         av[n++] = argv[i];
     execv(prog, av); // through fakechroot and the loader; only returns on failure, then run as is

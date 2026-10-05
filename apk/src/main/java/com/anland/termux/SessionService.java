@@ -151,6 +151,10 @@ public class SessionService extends Service {
         spawn("android-upower", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/system_bus\" ]"
                 + " && break; sleep 0.1; done; exec android-upower"), archEnv(run, sock));
 
+        // 2c. Hardware video (termux-va, third_party/): decodes and encodes with MediaCodec for the VA-API bridge.
+        spawn("termux-va", List.of(libDir + "/libtermuxva.so", "--sock", new File(run, "termux-va.sock").getPath()),
+                null);
+
         // 3. Sound: Hyprland's Anland backend creates PipeWire nodes, so the stack must exist (it reconnects anyway).
         //    wireplumber and pipewire-pulse give up when PipeWire is not up yet (a cold first start): they wait for its
         //    socket.
@@ -190,6 +194,14 @@ public class SessionService extends Service {
         env.put("ANLAND_SOCKET", sock.getPath());
         env.put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + new File(run, "bus").getPath());
         env.put("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=" + new File(run, "system_bus").getPath());
+        // Hardware video: VA-API through Mesa's termuxva bridge to the termux-va daemon (MediaCodec), when the
+        // rootfs's Mesa has the bridge.
+        if (new File(rootfs(this), "usr/lib/dri/termuxva_drv_video.so").exists()) {
+            env.put("LIBVA_DRIVER_NAME", "termuxva");
+            env.put("TERMUX_VA_BRIDGE", "1");
+            env.put("TERMUX_VA_GPU_BACKEND", "kgsl");
+            env.put("TERMUX_VA_SOCKET", new File(run, "termux-va.sock").getPath());
+        }
         env.remove("WAYLAND_DISPLAY");
         env.remove("DISPLAY");
         return env;

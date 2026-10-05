@@ -1,0 +1,3 @@
+termux-va daemon (MediaCodec hardware video decode/encode for VA-API), vendored unmodified.
+Upstream: https://github.com/lfdevs/termux-va  commit 69d3e0e (2026-10-04)  GPL-3.0 (LICENSE)
+Shipped in the APK as libtermuxva.so (apk/build.gradle), started by SessionService.
