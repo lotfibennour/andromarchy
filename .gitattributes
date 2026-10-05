@@ -1,2 +1,7 @@
-# Patches and shell scripts run on Linux/Android: keep LF everywhere.
-* text=auto eol=lf
+# Scripts run on Linux: LF only (a CRLF shebang fails: env: "python3": No such file)
+*.sh text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.conf text eol=lf
+*.patch -text

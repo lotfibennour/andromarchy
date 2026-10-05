@@ -946,6 +946,7 @@ public class MainActivity extends Activity
      */
     private void applyCameraState() {
         // Andromarchy: always on (no settings switch); a camera only opens while a Linux app streams from it.
+        requestDevicePermissions(); // location may be missing even when camera and mic were granted earlier
         if (cameraInited)
             return;
         if (checkSelfPermission(Manifest.permission.CAMERA)
