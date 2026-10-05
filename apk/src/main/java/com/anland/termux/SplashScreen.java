@@ -21,6 +21,9 @@ final class SplashScreen {
         "Opening the Wayland socket...", "Starting Omarchy's shell...", "Ready.",
     };
 
+    /** Shown at least this long, even when the session is up sooner: time to see it (touch still skips it). */
+    private static final long MIN_SHOWN_MS = 7000;
+
     static void showIfStarting(Activity a) {
         File run = SessionService.runDir(a);
         if (!SessionService.started)
@@ -56,8 +59,6 @@ final class SplashScreen {
                 int step = 0;
                 while (step < done.length && done[step])
                     step++;
-                if (step == done.length)
-                    a.runOnUiThread(() -> dismiss(w));
                 return "{\"step\":" + step + ",\"steps\":" + done.length + ",\"msg\":\"" + MSGS[step] + "\"}";
             }
 
@@ -68,11 +69,13 @@ final class SplashScreen {
         }, "A");
         w.loadUrl("file:///android_asset/splash.html");
         // Closed from here, not by the page's polling: a page that stalls must not cover the desktop.
+        long shown = android.os.SystemClock.uptimeMillis();
         android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
         h.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (new File(run, "desktop-ready").exists())
+                if (new File(run, "desktop-ready").exists()
+                        && android.os.SystemClock.uptimeMillis() - shown >= MIN_SHOWN_MS)
                     dismiss(w);
                 else if (w.getTag() != null)
                     h.postDelayed(this, 300);
