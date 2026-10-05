@@ -405,6 +405,7 @@ public class MainActivity extends Activity
         // the view starts GONE and a GONE view is never measured.
 
         setContentView(root);
+        SplashScreen.showIfStarting(this);
         // Establish a focused descendant after attachment so the DecorView routes
         // input through the surface even while the extra-keys bar is hidden.
         surfaceView.requestFocus();

@@ -47,6 +47,9 @@ public class SessionService extends Service {
         return new File(ctx.getFilesDir(), "rootfs");
     }
 
+    /** The session runs in this process (false: anything left in run/ is from a previous one). */
+    static volatile boolean started;
+
     public static File runDir(Context ctx) {
         return new File(ctx.getFilesDir(), "run");
     }
@@ -67,6 +70,7 @@ public class SessionService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        started = true;
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Session", NotificationManager.IMPORTANCE_LOW));
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
@@ -160,6 +164,11 @@ public class SessionService extends Service {
         env.put("EGL_PLATFORM", "surfaceless");
         env.put("OMARCHY_PATH", "/usr/share/omarchy");
         spawn("hyprland", List.of(launcher, "-c", "export PATH=/usr/share/omarchy/bin:$PATH; exec /usr/bin/Hyprland"), env);
+
+        // 5. desktop-ready (ends the splash, SplashScreen): Omarchy's shell runs, plus a second to draw the bar.
+        spawn("desktop-ready", List.of(launcher, "-c", "for i in $(seq 600); do pgrep -x quickshell >/dev/null"
+                + " || pgrep -x qs >/dev/null && break; sleep 0.2; done; sleep 1; touch \"$XDG_RUNTIME_DIR/desktop-ready\""),
+                archEnv(run, sock));
     }
 
     /** Android's language as a glibc locale name (fr_FR.UTF-8); C.UTF-8 when it has no country. */

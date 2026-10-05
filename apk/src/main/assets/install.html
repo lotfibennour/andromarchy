@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Andromarchy Setup</title>
+<!-- Design: "first launch.html" (repo root). Offline: no CDN, system fonts. -->
+<style>
+  :root { --g: #9cd462; --bg: #12131d; --low: #0c0d18; --dim: #12131d; --c: #1a1b26; --hi: #282935; --line: rgba(66,73,58,.4); --tx: #e2e1f1; --mut: #c2c9b5; --out: #8c9381; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--tx); font: 14px/20px system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+  .mono { font-family: monospace; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--low); border-bottom: 1px solid var(--line); padding: 0 16px; }
+  header .in { max-width: 80rem; margin: 0 auto; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .word { font: bold 20px monospace; letter-spacing: .12em; color: var(--g); text-shadow: 0 0 12px rgba(156,212,98,.4); }
+  .vsep { width: 1px; height: 16px; background: var(--line); }
+  .title { font-size: 18px; font-weight: 600; }
+  .script { display: flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 4px; background: #1e1f2a; border: 1px solid var(--line); color: var(--g); font: 11px monospace; }
+  @media (max-width: 640px) { .script, .vsep { display: none; } .title { font-size: 15px; } }
+  main { max-width: 48rem; margin: 0 auto; padding: 24px 16px; }
+  .card { background: var(--low); border: 1px solid rgba(66,73,58,.3); border-radius: 12px; padding: 24px; }
+  .head { border-bottom: 1px solid rgba(66,73,58,.2); padding-bottom: 8px; margin-bottom: 16px; }
+  .kicker { color: var(--g); font: 600 12px monospace; letter-spacing: .05em; margin-bottom: 4px; }
+  h1 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -.01em; }
+  .sub { color: var(--mut); margin: 6px 0 0; }
+  label, .lbl { display: block; color: var(--mut); font: 600 12px monospace; letter-spacing: .05em; margin: 16px 0 6px; }
+  input { width: 100%; background: var(--dim); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; color: var(--tx); font: inherit; outline: none; }
+  input:focus { border-color: var(--g); box-shadow: 0 0 0 1px var(--g); }
+  input::placeholder { color: var(--out); }
+  #email { font-family: monospace; }
+  .layouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+  .opt { padding: 10px; border-radius: 8px; border: 1px solid rgba(66,73,58,.3); background: var(--dim); display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .opt .n { font: 500 12px monospace; } .opt .c { font: 600 10px monospace; letter-spacing: .08em; color: var(--mut); }
+  .opt .s { font: 600 10px monospace; letter-spacing: .08em; color: var(--out); }
+  .opt.on { border-color: var(--g); background: rgba(156,212,98,.1); box-shadow: 0 0 10px rgba(156,212,98,.12); }
+  .opt.on .n, .opt.on .s { color: var(--g); font-weight: bold; }
+  .prog { margin-top: 16px; padding: 16px; border-radius: 8px; background: var(--c); border: 1px solid rgba(66,73,58,.3); display: none; }
+  .prog .row { display: flex; justify-content: space-between; gap: 8px; font: 11px monospace; }
+  .prog .row b { color: var(--g); }
+  .prog .what { color: var(--out); font: 11px monospace; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track { height: 10px; margin-top: 8px; background: var(--dim); border-radius: 99px; overflow: hidden; border: 1px solid rgba(66,73,58,.3); }
+  #fill { height: 100%; width: 0; background: var(--g); border-radius: 99px; transition: width .15s; }
+  #err { color: #ffb4ab; margin-top: 12px; display: none; }
+  button { width: 100%; margin-top: 16px; padding: 12px 16px; border: 0; border-radius: 8px; background: var(--g); color: #0d1117; font: bold 18px system-ui, sans-serif; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  button:active { transform: scale(.98); } button:disabled { opacity: .5; }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <div style="display:flex;align-items:center;gap:16px"><span class="word">ANDROMARCHY</span><span class="vsep"></span><span class="title">Initial Environment Setup</span></div>
+  <span class="script">&gt;_ andromarchy-init</span>
+</div></header>
+<main><div class="card">
+  <div class="head">
+    <div class="kicker">IDENTITY &amp; KEYMAP</div>
+    <h1>Configure Your Profile</h1>
+    <p class="sub">Omarchy (Arch Linux + Hyprland) on Android. Language and time zone follow Android. Then the system download (about 2 GB).</p>
+  </div>
+  <label for="name">FULL NAME</label>
+  <input id="name" type="text" placeholder="Optional" autocomplete="name">
+  <label for="email">EMAIL / GIT COMMIT IDENTITY</label>
+  <input id="email" type="email" placeholder="Optional" autocomplete="email">
+  <div class="lbl">KEYBOARD LAYOUTS <span style="color:var(--out);font-weight:normal">— the first is your physical keyboard's; the on-screen keyboard cycles through all</span></div>
+  <div class="layouts" id="layouts"></div>
+  <div class="prog" id="prog">
+    <div class="row"><span>Install progress <span style="color:var(--out)">// rootfs</span></span><b id="pct">0%</b></div>
+    <div class="track"><div id="fill"></div></div>
+    <div class="what" id="what"></div>
+  </div>
+  <div id="err"></div>
+  <button id="go" type="button">Save &amp; Install <span style="font-size:20px">→</span></button>
+</div></main>
+<script>
+  // A (Java, InstallActivity): layouts() = [{id, label, on}], install(name, email, "fr,us").
+  // Java calls progress(permille, text) and failed(message).
+  const order = []; // selection order: the first chosen is the physical keyboard's
+  for (const l of JSON.parse(A.layouts())) {
+    const d = document.createElement('div');
+    d.className = 'opt';
+    d.innerHTML = '<div><div class="n"></div><div class="c"></div></div><span class="s"></span>';
+    d.querySelector('.n').textContent = l.label;
+    d.querySelector('.c').textContent = l.id;
+    const s = d.querySelector('.s');
+    const paint = () => { const i = order.indexOf(l.id); d.classList.toggle('on', i >= 0); s.textContent = i < 0 ? 'SELECT' : i === 0 ? '✓ MAIN' : '✓ ' + (i + 1); };
+    d.onclick = () => { const i = order.indexOf(l.id); i >= 0 ? order.splice(i, 1) : order.push(l.id); document.querySelectorAll('.opt').forEach(o => o.paint()); };
+    d.paint = paint;
+    if (l.on) order.push(l.id);
+    layouts.appendChild(d);
+  }
+  document.querySelectorAll('.opt').forEach(o => o.paint());
+  go.onclick = () => {
+    go.disabled = true; err.style.display = 'none'; prog.style.display = 'block';
+    A.install(name.value, email.value, (order.length ? order : ['us']).join(','));
+  };
+  function progress(pm, text) { const p = pm >= 0 ? (pm / 10).toFixed(1) + '%' : ''; pct.textContent = p; if (pm >= 0) fill.style.width = p; what.textContent = text; }
+  function failed(m) { err.textContent = 'Install failed: ' + m + ' — check the connection and retry.'; err.style.display = 'block'; go.disabled = false; }
+</script>
+</body>
+</html>

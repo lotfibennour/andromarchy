@@ -1,0 +1,170 @@
+<!DOCTYPE html><html class="dark" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Andromarchy Linux Setup</title>
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=JetBrains+Mono:wght@100..900&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-primary": "#1d3700",
+            "on-tertiary-fixed-variant": "#2c5000",
+            "tertiary-container": "#9cd462",
+            "secondary-fixed": "#dce1ff",
+            "on-error": "#690005",
+            "outline": "#8c9381",
+            "secondary": "#bdc5eb",
+            "on-primary-fixed": "#0e2000",
+            "on-surface-variant": "#c2c9b5",
+            "surface-container": "#1e1f2a",
+            "inverse-surface": "#e2e1f1",
+            "primary-fixed-dim": "#9ed764",
+            "primary": "#9cd462",
+            "surface-dim": "#12131d",
+            "on-secondary-fixed-variant": "#3d4565",
+            "surface-bright": "#383844",
+            "on-secondary": "#272f4d",
+            "error-container": "#93000a",
+            "on-primary-container": "#0d1117",
+            "on-primary-fixed-variant": "#2c5000",
+            "background": "#12131d",
+            "surface-container-low": "#1a1b26",
+            "outline-variant": "#42493a",
+            "primary-container": "#9cd462",
+            "secondary-container": "#3d4565",
+            "surface-container-high": "#282935",
+            "on-tertiary-fixed": "#40000b",
+            "on-secondary-fixed": "#111a37",
+            "surface-container-lowest": "#0c0d18",
+            "surface-tint": "#9ed764",
+            "primary-fixed": "#b9f47d",
+            "on-secondary-container": "#acb4d9",
+            "surface": "#12131d",
+            "surface-container-highest": "#333440",
+            "tertiary": "#9cd462",
+            "on-tertiary-container": "#1d3700",
+            "on-tertiary": "#1d3700",
+            "secondary-fixed-dim": "#bdc5eb",
+            "surface-variant": "#333440",
+            "inverse-on-surface": "#2f303b",
+            "inverse-primary": "#3c6a00",
+            "on-background": "#e2e1f1",
+            "tertiary-fixed": "#ffdada",
+            "on-error-container": "#ffdad6",
+            "tertiary-fixed-dim": "#9cd462",
+            "error": "#ffb4ab",
+            "on-surface": "#e2e1f1"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "gutter-tablet": "1.5rem",
+            "gutter": "1rem",
+            "space-xl": "2rem",
+            "space-xs": "0.25rem",
+            "margin": "1rem",
+            "space-sm": "0.5rem",
+            "margin-tablet": "2rem",
+            "space-md": "1rem",
+            "space-lg": "1.5rem"
+          },
+          "fontFamily": {
+            "label-md": ["JetBrains Mono"],
+            "body-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "headline-lg-mobile": ["Inter"],
+            "code-lg": ["JetBrains Mono"],
+            "code-sm": ["JetBrains Mono"],
+            "headline-md": ["Inter"],
+            "code-md": ["JetBrains Mono"],
+            "body-md": ["Inter"],
+            "label-sm": ["JetBrains Mono"],
+            "headline-lg": ["Inter"],
+            "headline-sm": ["Inter"]
+          },
+          "fontSize": {
+            "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+            "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+            "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+            "headline-lg-mobile": ["26px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "code-lg": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+            "code-sm": ["11px", {"lineHeight": "14px", "fontWeight": "400"}],
+            "headline-md": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+            "code-md": ["12px", {"lineHeight": "18px", "fontWeight": "500"}],
+            "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+            "label-sm": ["10px", {"lineHeight": "14px", "letterSpacing": "0.08em", "fontWeight": "600"}],
+            "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      line-height: 1;
+      text-transform: none;
+      letter-spacing: normal;
+      word-wrap: normal;
+      white-space: nowrap;
+      direction: ltr;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #12131d;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #42493a;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md antialiased selection:bg-[#9cd462] selection:text-[#0d1117]">
+<!-- Top App Bar (Tablet Landscape Optimized) -->
+<header class="w-full bg-surface-container-lowest border-b border-outline-variant/30 sticky top-0 z-40 px-margin-tablet">
+<div class="max-w-7xl mx-auto h-16 flex items-center justify-between">
+<!-- Left cluster: Wordmark and Environment Title (No square icon) -->
+<div class="flex items-center space-x-space-md">
+<div class="h-7 w-auto flex items-center">
+<img alt="ANDROMARCHY" class="h-7 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1Vogy3I6P0WI_XA01gYMgdCfkHkGEFZ-IEdM2ktL9CQObxhuG1YgeD3mwrvJPZDhYXefZbaSWWTUM3R9qlCMVWUJzWjVCTwOVV7v9MctFgaFAO8hgZCHJXz8wFKIOiCsZqeUi8VvnZHFdwkuHxAiQ3YWDHxrIEBd6rzT8qdRIKWf4Ig4FDMWCXvrFW0FGAbjovlVX-yIP2CUbBSYnzpI6wBlPSjKUy_G9OyxZlZbolO6ZHVWnEV_pv5FlI0">
+</div>
+<div class="h-4 w-px bg-outline-variant/40 hidden sm:block"></div>
+<div class="flex items-center space-x-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Initial Environment Setup</span>
+</div>
+</div>
+<!-- Right cluster: Script badge, step indicator & session status -->
+<div class="flex items-center space-x-space-md">
+<!-- Script badge -->
+<div class="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded bg-surface-container border border-outline-variant/40">
+<span class="material-symbols-outlined text-[#9cd462]" style="font-size: 16px;">terminal</span>
+<span class="font-code-sm text-code-sm text-[#9cd462] tracking-wide">andromarchy-init.sh</span>
+</div>
+<!-- Step Tracker Pill -->
+<button aria-label="Settings" class="p-2 rounded-lg text-on-surface-variant hover:text-[#9cd462] hover:bg-surface-container-high/40 transition-colors duration-150 active:scale-95" type="button">
+<span class="material-symbols-outlined" style="font-size: 20px;">tune</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content: Tablet Widescreen 2-Column Split Layout -->
+<main class="flex-1 max-w-7xl mx-auto w-full p-margin-tablet grid grid-cols-12 gap-gutter-tablet items-start"><div class="col-span-12 max-w-3xl mx-auto w-full flex flex-col space-y-space-md"><div class="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-space-lg shadow-sm space-y-space-md"><div class="border-b border-outline-variant/20 pb-space-sm"><div class="flex items-center space-x-2 text-[#9cd462] font-label-md text-label-md mb-1"><span class="material-symbols-outlined" style="font-size: 16px;">badge</span><span class="">OPERATOR IDENTITY &amp; KEYMAP</span></div><h1 class="font-headline-md text-headline-md text-on-surface">Configure Your Profile</h1></div><div class="space-y-space-md"><div><label class="block font-label-md text-label-md text-on-surface-variant mb-1.5" for="full-name">FULL OPERATOR NAME</label><div class="relative"><span class="absolute inset-y-0 left-0 flex items-center pl-3 text-outline pointer-events-none"><span class="material-symbols-outlined" style="font-size: 18px;">person</span></span><input class="w-full bg-surface-dim border border-outline-variant/40 rounded-lg pl-10 pr-3 py-2 font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:border-[#9cd462] focus:ring-1 focus:ring-[#9cd462] transition-all" id="full-name" type="text" value="Alex Mercer"></div></div><div><label class="block font-label-md text-label-md text-on-surface-variant mb-1.5" for="email">OPERATIONAL EMAIL / GIT COMMIT IDENTITY</label><div class="relative"><span class="absolute inset-y-0 left-0 flex items-center pl-3 text-outline pointer-events-none"><span class="material-symbols-outlined" style="font-size: 18px;">mail</span></span><input class="w-full bg-surface-dim border border-outline-variant/40 rounded-lg pl-10 pr-3 py-2 font-code-md text-code-md text-on-surface placeholder:text-outline focus:outline-none focus:border-[#9cd462] focus:ring-1 focus:ring-[#9cd462] transition-all" id="email" type="email" value="alex@andromarchy.dev"></div></div><div><label class="block font-label-md text-label-md text-on-surface-variant mb-1.5">KEYBOARD LAYOUT SELECTION</label><div class="space-y-1.5"><div class="p-2.5 rounded-lg border border-[#9cd462] bg-[#9cd462]/10 flex items-center justify-between cursor-pointer transition-colors shadow-[0_0_10px_rgba(156,212,98,0.12)]"><div class="flex items-center space-x-2"><span class="w-1.5 h-1.5 rounded-full bg-[#9cd462]"></span><div><div class="font-code-md text-code-md text-[#9cd462] font-bold">English (US) ANSI Standard</div><div class="font-label-sm text-label-sm text-on-surface-variant">us / pc105 / utf-8 (Default)</div></div></div><span class="material-symbols-outlined text-[#9cd462]" style="font-size: 18px; font-variation-settings: 'FILL' 1;">check_circle</span></div><div class="p-2.5 rounded-lg border border-outline-variant/30 bg-surface-dim hover:bg-surface-container-high flex items-center justify-between cursor-pointer transition-colors"><div class="flex items-center space-x-2"><span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span><div><div class="font-code-md text-code-md text-on-surface">English (UK) ISO Layout</div><div class="font-label-sm text-label-sm text-on-surface-variant">uk / gb / AltGr deadkeys</div></div></div><span class="font-label-sm text-label-sm text-outline">SELECT</span></div><div class="p-2.5 rounded-lg border border-outline-variant/30 bg-surface-dim hover:bg-surface-container-high flex items-center justify-between cursor-pointer transition-colors"><div class="flex items-center space-x-2"><span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span><div><div class="font-code-md text-code-md text-on-surface">German (DE) QWERTZ</div><div class="font-label-sm text-label-sm text-on-surface-variant">de-latin1-nodeadkeys</div></div></div><span class="font-label-sm text-label-sm text-outline">SELECT</span></div><div class="p-2.5 rounded-lg border border-outline-variant/30 bg-surface-dim hover:bg-surface-container-high flex items-center justify-between cursor-pointer transition-colors"><div class="flex items-center space-x-2"><span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span><div><div class="font-code-md text-code-md text-on-surface">French (FR) AZERTY</div><div class="font-label-sm text-label-sm text-on-surface-variant">fr-pc / latin9</div></div></div><span class="font-label-sm text-label-sm text-outline">SELECT</span></div></div></div><div class="p-space-md rounded-lg bg-surface-container-low border border-outline-variant/30 space-y-2"><div class="flex items-center justify-between text-code-sm font-code-sm"><div class="flex items-center space-x-2 text-on-surface font-medium"><span class="material-symbols-outlined text-[#9cd462]" style="font-size: 16px;">hourglass_top</span><span class="">Install Progress: <strong class="text-[#9cd462]">68%</strong></span><span class="text-outline">// Bootstrapping RootFS</span></div><span class="text-[#9cd462] font-semibold tracking-wide">68%</span></div><div class="w-full bg-surface-dim h-2.5 rounded-full overflow-hidden border border-outline-variant/30"><div class="bg-[#9cd462] h-full rounded-full transition-all duration-150" style="width: 68%;"></div></div></div><div class="pt-space-xs"><button class="w-full py-3 px-space-md rounded-lg bg-[#9cd462] hover:bg-[#8ecb52] text-[#0d1117] font-headline-sm text-headline-sm font-bold flex items-center justify-center space-x-2 transition-transform duration-100 active:scale-98 shadow-sm" type="button"><span class="">Save &amp; Continue to Distro</span><span class="material-symbols-outlined text-[#0d1117]" style="font-size: 20px;">arrow_forward</span></button></div></div></div></div></main>
+
+
+</body></html>

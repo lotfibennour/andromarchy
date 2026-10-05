@@ -5,15 +5,12 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.StatFs;
-import android.view.Gravity;
-import android.view.View;
-import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ProgressBar;
-import android.widget.ScrollView;
-import android.widget.TextView;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.zip.GZIPInputStream;
 
@@ -26,8 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 
 /**
@@ -52,104 +47,67 @@ public class InstallActivity extends Activity {
             {"ir", "فارسی"}, {"jp", "日本語"}, {"kr", "한국어"}, {"cn", "中文"}, {"in", "हिन्दी"},
     };
 
-    private final List<CheckBox> layoutBoxes = new ArrayList<>();
-    private EditText name, email;
-    private TextView status;
-    private ProgressBar progress;
-    private Button install;
+    private WebView page;
+
+    // The page (assets/install.html, design: "first launch.html" at the repo root) calls these, as "A".
+    private final Object bridge = new Object() {
+        /** [{id, label, on}]: Android's language's layout first and on, then US English (on). */
+        @JavascriptInterface
+        public String layouts() {
+            String lang = Locale.getDefault().getLanguage();
+            String suggested = lang.equals("ar") ? "ara" : lang.equals("en") ? "us" : lang.equals("uk") ? "ua"
+                    : lang.equals("he") ? "il" : lang.equals("fa") ? "ir" : lang.equals("ja") ? "jp"
+                    : lang.equals("ko") ? "kr" : lang.equals("zh") ? "cn" : lang.equals("hi") ? "in"
+                    : lang.equals("el") ? "gr" : lang.equals("pt") && Locale.getDefault().getCountry().equals("BR") ? "br"
+                    : lang;
+            JSONArray out = new JSONArray();
+            try {
+                for (String[] l : LAYOUTS)
+                    if (l[0].equals(suggested))
+                        out.put(new JSONObject().put("id", l[0]).put("label", l[1]).put("on", true));
+                for (String[] l : LAYOUTS)
+                    if (!l[0].equals(suggested))
+                        out.put(new JSONObject().put("id", l[0]).put("label", l[1]).put("on", l[0].equals("us")));
+            } catch (JSONException e) {
+                throw new RuntimeException(e);
+            }
+            return out.toString();
+        }
+
+        @JavascriptInterface
+        public void install(String name, String email, String layouts) {
+            start(name, email, layouts);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        int pad = (int) (24 * getResources().getDisplayMetrics().density);
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(pad, pad, pad, pad);
-        col.setBackgroundColor(Color.rgb(0x1a, 0x1b, 0x26));
-
-        col.addView(text("Andromarchy", 28));
-        col.addView(text("Omarchy (Arch Linux + Hyprland) on Android. First launch: a few choices, then the system "
-                + "download (about 2 GB).", 15));
-
-        col.addView(text("\nKeyboard layouts (the first one is your physical keyboard's; the on-screen keyboard "
-                + "cycles through all)", 17));
-        String lang = Locale.getDefault().getLanguage();
-        String suggested = lang.equals("ar") ? "ara" : lang.equals("en") ? "us" : lang.equals("uk") ? "ua"
-                : lang.equals("he") ? "il" : lang.equals("fa") ? "ir" : lang.equals("ja") ? "jp"
-                : lang.equals("ko") ? "kr" : lang.equals("zh") ? "cn" : lang.equals("hi") ? "in"
-                : lang.equals("el") ? "gr" : lang.equals("pt") && Locale.getDefault().getCountry().equals("BR") ? "br"
-                : lang;
-        for (String[] l : LAYOUTS) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText(l[1] + "  (" + l[0] + ")");
-            cb.setTextColor(Color.WHITE);
-            cb.setTag(l[0]);
-            cb.setChecked(l[0].equals(suggested) || l[0].equals("us"));
-            layoutBoxes.add(cb);
-            col.addView(cb);
-        }
-
-        col.addView(text("\nName and email (optional: git, and the Compose shortcuts)", 17));
-        name = field("Full name");
-        email = field("Email");
-        col.addView(name);
-        col.addView(email);
-
-        install = new Button(this);
-        install.setText("Install");
-        install.setOnClickListener(v -> start());
-        col.addView(install);
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(1000);
-        progress.setVisibility(View.GONE);
-        col.addView(progress);
-        status = text("", 14);
-        col.addView(status);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(Color.rgb(0x1a, 0x1b, 0x26));
-        scroll.addView(col);
-        setContentView(scroll);
+        page = new WebView(this);
+        page.setBackgroundColor(Color.rgb(0x12, 0x13, 0x1d));
+        page.getSettings().setJavaScriptEnabled(true);
+        page.addJavascriptInterface(bridge, "A");
+        page.loadUrl("file:///android_asset/install.html");
+        setContentView(page);
     }
 
-    private TextView text(String s, int sp) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(sp);
-        t.setTextColor(Color.WHITE);
-        t.setGravity(Gravity.START);
-        return t;
+    /** Calls a function of the page with JSON-encoded arguments. */
+    private void call(String fn, Object... args) {
+        JSONArray a = new JSONArray();
+        for (Object o : args)
+            a.put(o);
+        String js = fn + ".apply(null, " + a + ")";
+        runOnUiThread(() -> page.evaluateJavascript(js, null));
     }
 
-    private EditText field(String hint) {
-        EditText e = new EditText(this);
-        e.setHint(hint);
-        e.setTextColor(Color.WHITE);
-        e.setHintTextColor(Color.GRAY);
-        e.setSingleLine();
-        return e;
-    }
-
-    private void start() {
-        // The physical keyboard's layout first: "us" only leads when it is the sole choice besides none.
-        List<String> layouts = new ArrayList<>();
-        for (CheckBox cb : layoutBoxes)
-            if (cb.isChecked() && !cb.getTag().equals("us"))
-                layouts.add((String) cb.getTag());
-        if (layoutBoxes.get(0).isChecked())
-            layouts.add(layouts.isEmpty() ? 0 : layouts.size(), "us");
-        if (layouts.isEmpty())
-            layouts.add("us");
-
+    private void start(String name, String email, String layouts) {
         File files = getFilesDir();
         if (new StatFs(files.getPath()).getAvailableBytes() < NEEDED_BYTES) {
-            status.setText("Not enough free space: about " + (NEEDED_BYTES >> 30) + " GB are needed.");
+            call("failed", "not enough free space: about " + (NEEDED_BYTES >> 30) + " GB are needed");
             return;
         }
-        install.setEnabled(false);
-        progress.setVisibility(View.VISIBLE);
-        String conf = "KB_LAYOUTS=" + String.join(",", layouts) + "\nFULL_NAME=" + quote(name.getText().toString())
-                + "\nEMAIL=" + quote(email.getText().toString()) + "\n";
+        String conf = "KB_LAYOUTS=" + layouts.replaceAll("[^a-z,]", "") + "\nFULL_NAME=" + quote(name)
+                + "\nEMAIL=" + quote(email) + "\n";
         new Thread(() -> {
             try {
                 installRootfs(conf);
@@ -158,10 +116,7 @@ public class InstallActivity extends Activity {
                     finish();
                 });
             } catch (Throwable e) { // shown, never a crash: the user can retry
-                runOnUiThread(() -> {
-                    status.setText("Install failed: " + e.getMessage() + "\nCheck the connection and retry.");
-                    install.setEnabled(true);
-                });
+                call("failed", String.valueOf(e.getMessage()));
             }
         }).start();
     }
@@ -211,11 +166,7 @@ public class InstallActivity extends Activity {
                 shown[0] = now;
                 String what = (local.canRead() ? "Installing" : "Downloading and installing") + " ("
                         + (read[0] >> 20) + (size > 0 ? " / " + (size >> 20) : "") + " MB)\n" + entry;
-                runOnUiThread(() -> {
-                    if (size > 0)
-                        progress.setProgress((int) (read[0] * 1000 / size));
-                    status.setText(what);
-                });
+                call("progress", size > 0 ? read[0] * 1000 / size : -1, what);
             });
         }
         File setup = new File(partial, "root/.config/andromarchy/setup.conf");
