@@ -8,6 +8,8 @@
 <style>
   @font-face { font-family: 'JBM'; src: url('file:///data/data/andro.marchy/files/rootfs/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf'); }
   @font-face { font-family: 'JBM'; font-weight: bold; src: url('file:///data/data/andro.marchy/files/rootfs/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf'); }
+  /* Omarchy Font by Mark Cuda (name table: "Free to use, share and modify. Not affiliated with Omarchy or 37signals.") */
+  @font-face { font-family: 'OmarchyFont'; src: url('omarchy-font.ttf'); }
   :root { --g: #9cd462; --bg: #0c0d14; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: #cbd5e1; font-family: 'JBM', monospace; overflow: hidden; }
@@ -23,7 +25,7 @@
   .tag { display: flex; gap: 8px; font-size: 13px; letter-spacing: .15em; color: rgba(156,212,98,.75); margin-bottom: 20px; }
   .tag b { color: var(--g); } .tag .d { color: #64748b; } .tag .t { color: #94a3b8; }
   .logo { position: relative; padding: 16px 8px; animation: flicker .2s infinite; will-change: opacity; }
-  h1 { margin: 0; font-weight: normal; font-size: clamp(36px, 9vw, 72px); color: var(--g); letter-spacing: .12em; user-select: none; }
+  h1 { margin: 0; font-family: 'OmarchyFont', 'JBM', monospace; font-weight: normal; font-size: clamp(36px, 9vw, 72px); color: var(--g); letter-spacing: .12em; user-select: none; }
   .under { display: none; } /* a full-screen blur exceeds WebView's tile memory at 2560x1600: nothing drew */
   .main { animation: reveal 1.6s cubic-bezier(.16,1,.3,1) forwards, pulse 3s ease-in-out 1.6s infinite; }
   @keyframes reveal { 0% { opacity: 0; filter: blur(12px) brightness(2); transform: scale(.92); letter-spacing: .35em; }

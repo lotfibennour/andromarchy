@@ -6,13 +6,14 @@
 <title>Andromarchy Setup</title>
 <!-- Design: "first launch.html" (repo root). Offline: no CDN, system fonts. -->
 <style>
+  @font-face { font-family: 'OmarchyFont'; src: url('omarchy-font.ttf'); } /* Mark Cuda: free to use, share and modify */
   :root { --g: #9cd462; --bg: #12131d; --low: #0c0d18; --dim: #12131d; --c: #1a1b26; --hi: #282935; --line: rgba(66,73,58,.4); --tx: #e2e1f1; --mut: #c2c9b5; --out: #8c9381; }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--tx); font: 14px/20px system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
   .mono { font-family: monospace; }
   header { position: sticky; top: 0; z-index: 2; background: var(--low); border-bottom: 1px solid var(--line); padding: 0 16px; }
   header .in { max-width: 80rem; margin: 0 auto; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .word { font: bold 20px monospace; letter-spacing: .12em; color: var(--g); text-shadow: 0 0 12px rgba(156,212,98,.4); }
+  .word { font: 22px 'OmarchyFont', monospace; letter-spacing: .12em; color: var(--g); text-shadow: 0 0 12px rgba(156,212,98,.4); }
   .vsep { width: 1px; height: 16px; background: var(--line); }
   .title { font-size: 18px; font-weight: 600; }
   .script { display: flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 4px; background: #1e1f2a; border: 1px solid var(--line); color: var(--g); font: 11px monospace; }
