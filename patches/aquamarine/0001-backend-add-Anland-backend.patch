@@ -249,10 +249,10 @@ index edc4aff..7d9a985 100644
      if (age)
 diff --git a/src/backend/Anland.cpp b/src/backend/Anland.cpp
 new file mode 100644
-index 0000000..5cea90a
+index 0000000..d742070
 --- /dev/null
 +++ b/src/backend/Anland.cpp
-@@ -0,0 +1,633 @@
+@@ -0,0 +1,643 @@
 +#include <aquamarine/backend/Anland.hpp>
 +#include <cstdio>
 +#include <cstdlib>
@@ -269,6 +269,7 @@ index 0000000..5cea90a
 +extern "C" {
 +#include "anland/display_producer.h"
 +#include "anland/anland_audio.h"
++#include "anland/anland_camera.h"
 +}
 +
 +using namespace Aquamarine;
@@ -479,6 +480,7 @@ index 0000000..5cea90a
 +
 +Aquamarine::CAnlandBackend::~CAnlandBackend() {
 +    anland_audio_stop();
++    anland_camera_stop();
 +    buffers.clear();
 +    if (display)
 +        disconnect(display);
@@ -528,6 +530,8 @@ index 0000000..5cea90a
 +    if (anland_audio_start() < 0)
 +        backend->log(AQ_LOG_WARNING, "anland: PipeWire audio unavailable (is pipewire running?)");
 +    anland_audio_set_fd(get_audio_fd(display));
++    // Cameras: ask for the service; its fds arrive as an INPUT_TYPE_RESOURCE event (when enabled in the app's settings).
++    push_resources_request(display, SERVICE_TYPE_CAMERA, nullptr);
 +    armReconnect(500); // doubles as the heartbeat tick while connected
 +    backend->log(AQ_LOG_DEBUG, std::format("anland: connected, {} buffers of {}, {} mHz", buffers.size(), size, refreshmHz));
 +    return true;
@@ -698,12 +702,16 @@ index 0000000..5cea90a
 +            break;
 +        }
 +        case INPUT_TYPE_RESOURCE: {
-+            // camera etc.: not supported, take and close the fds so the channel stays in sync
++            // Always take the fds so the channel stays in sync; cameras become PipeWire Video/Source nodes.
 +            int       fds[16], got = 0;
 +            const int n = ev.resource.fdnum < 16 ? (int)ev.resource.fdnum : 16;
-+            if (n > 0 && poll_input_event_extend_fds(display, fds, n, &got, 5000) == 1)
-+                for (int i = 0; i < got; ++i)
-+                    close(fds[i]);
++            if (n > 0 && poll_input_event_extend_fds(display, fds, n, &got, 5000) == 1) {
++                if (ev.resource.type == SERVICE_TYPE_CAMERA)
++                    anland_camera_set_fds(fds, got);
++                else
++                    for (int i = 0; i < got; ++i)
++                        close(fds[i]);
++            }
 +            break;
 +        }
 +        default: break; // DISPLAY_REFRESH, ACTION: ignored for now
@@ -715,6 +723,7 @@ index 0000000..5cea90a
 +    // Its fds are already closed: drop them from the event loop (deferred, we may be inside their handler) and start retrying.
 +    auto* self = (CAnlandBackend*)data;
 +    anland_audio_set_fd(-1); // before the transport closes the borrowed fd; the streams keep running (silence)
++    anland_camera_stop();    // nodes come back with the service fds on reconnect
 +    self->backend->log(AQ_LOG_DEBUG, "anland: consumer lost, waiting for it to come back");
 +    fprintf(stderr, "anland: consumer lost\n");
 +    if (self->output && self->output->swapchain && self->output->swapchain->currentOptions().length > 0)
@@ -775,6 +784,7 @@ index 0000000..5cea90a
 +    }
 +
 +    anland_audio_set_fd(get_audio_fd(display));
++    push_resources_request(display, SERVICE_TYPE_CAMERA, nullptr);
 +    backend->log(AQ_LOG_DEBUG, std::format("anland: consumer back, {} buffers of {}", buffers.size(), size));
 +    fprintf(stderr, "anland: consumer back, %zu buffers of %.0fx%.0f\n", buffers.size(), size.x, size.y);
 +
@@ -1525,6 +1535,377 @@ index 0000000..5acf1f1
 +/* Point the engine at the current audio socket, or -1 to detach (drop/silence).
 + * Re-pointing resets the mic buffer and re-announces the playback format. */
 +void anland_audio_set_fd(int audio_fd);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
+diff --git a/src/backend/anland/anland_camera.c b/src/backend/anland/anland_camera.c
+new file mode 100644
+index 0000000..ce1cc5e
+--- /dev/null
++++ b/src/backend/anland/anland_camera.c
+@@ -0,0 +1,330 @@
++#define _GNU_SOURCE
++#include "anland_camera.h"
++
++#include <errno.h>
++#include <poll.h>
++#include <stdbool.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <sys/socket.h>
++#include <unistd.h>
++
++#include <pipewire/pipewire.h>
++#include <spa/param/video/format-utils.h>
++#include <spa/param/buffers.h>
++#include <spa/pod/builder.h>
++
++/* ---- wire protocol: identical to the app's camera_service.h ---- */
++struct camera_ctrl_msg {
++    uint8_t  type;
++    uint8_t  reserved;
++    uint16_t len;
++} __attribute__((packed));
++#define CAMERA_CTRL_GET_INFO     0x01
++#define CAMERA_CTRL_START_RECORD 0x02 /* id(1B) w(2B,LE) h(2B,LE) */
++#define CAMERA_CTRL_STOP_RECORD  0x03 /* id(1B) */
++#define CAMERA_CTRL_INFO_REPLY   0x81 /* num(1B) + per-cam w,h (2B,LE each) */
++
++struct cam_stream_msg {
++    uint8_t  type;
++    uint8_t  slot;
++    uint16_t fmt;
++    uint32_t a;
++    uint32_t b;
++} __attribute__((packed));
++#define CAM_STREAM_GET_SHM   1
++#define CAM_STREAM_SHM_OFFER 2 /* + shm fd, a = slot_bytes */
++#define CAM_STREAM_READY     3 /* slot, fmt, a = w, b = h */
++#define CAM_STREAM_DONE      4
++#define CAMERA_SLOTS         2
++#define MAX_CAMERAS          8
++
++/* Size asked from Android: 720p, or the camera's own maximum when smaller. A size the
++ * camera supports for YUV output; ponytail: fixed, add mode negotiation if apps need others. */
++#define WANT_W 1280
++#define WANT_H 720
++#define FPS    30
++
++struct cam {
++    struct anland_camera *owner;
++    int                   id, stream_fd;
++    uint32_t              w, h;
++    uint8_t              *shm;
++    size_t                slot_bytes;
++    struct pw_stream     *stream;
++    struct spa_hook       listener;
++    struct spa_source    *io;
++    bool                  recording;
++};
++
++struct anland_camera {
++    struct pw_thread_loop *loop;
++    struct pw_context     *context;
++    struct pw_core        *core;
++    int                    ctrl_fd;
++    int                    n;
++    struct cam             cams[MAX_CAMERAS];
++};
++
++static struct anland_camera *g_cam = NULL;
++
++static int read_full(int fd, void *buf, size_t n, int timeout_ms)
++{
++    uint8_t *p = buf;
++    while (n) {
++        struct pollfd pfd = {fd, POLLIN, 0};
++        if (poll(&pfd, 1, timeout_ms) <= 0)
++            return -1;
++        ssize_t r = read(fd, p, n);
++        if (r <= 0)
++            return -1;
++        p += r, n -= (size_t)r;
++    }
++    return 0;
++}
++
++static void ctrl_send(struct anland_camera *c, uint8_t type, const uint8_t *payload, uint16_t len)
++{
++    uint8_t                msg[sizeof(struct camera_ctrl_msg) + 8];
++    struct camera_ctrl_msg h = {type, 0, len};
++    memcpy(msg, &h, sizeof h);
++    if (len)
++        memcpy(msg + sizeof h, payload, len);
++    if (send(c->ctrl_fd, msg, sizeof h + len, MSG_NOSIGNAL) < 0)
++        fprintf(stderr, "anland-camera: ctrl send failed: %s\n", strerror(errno));
++}
++
++static void set_recording(struct cam *k, bool on)
++{
++    if (k->recording == on)
++        return;
++    k->recording = on;
++    uint8_t p[5] = {(uint8_t)k->id};
++    if (on) {
++        uint16_t w = (uint16_t)k->w, h = (uint16_t)k->h;
++        memcpy(p + 1, &w, 2);
++        memcpy(p + 3, &h, 2);
++        ctrl_send(k->owner, CAMERA_CTRL_START_RECORD, p, 5);
++    } else
++        ctrl_send(k->owner, CAMERA_CTRL_STOP_RECORD, p, 1);
++    fprintf(stderr, "anland-camera: camera %d %s (%ux%u)\n", k->id, on ? "on" : "off", k->w, k->h);
++}
++
++static void stream_send(int fd, uint8_t type, uint8_t slot)
++{
++    struct cam_stream_msg m = {type, slot, 0, 0, 0};
++    send(fd, &m, sizeof m, MSG_NOSIGNAL);
++}
++
++/* The camera's shared memory: ask for it and receive the fd (SCM_RIGHTS). */
++static int get_shm(struct cam *k)
++{
++    stream_send(k->stream_fd, CAM_STREAM_GET_SHM, 0);
++    struct pollfd pfd = {k->stream_fd, POLLIN, 0};
++    if (poll(&pfd, 1, 2000) <= 0)
++        return -1;
++    struct cam_stream_msg m;
++    char                  cbuf[CMSG_SPACE(sizeof(int))];
++    struct iovec          iov = {&m, sizeof m};
++    struct msghdr         mh = {.msg_iov = &iov, .msg_iovlen = 1, .msg_control = cbuf, .msg_controllen = sizeof cbuf};
++    if (recvmsg(k->stream_fd, &mh, 0) != (ssize_t)sizeof m || m.type != CAM_STREAM_SHM_OFFER)
++        return -1;
++    struct cmsghdr *cm = CMSG_FIRSTHDR(&mh);
++    if (!cm || cm->cmsg_type != SCM_RIGHTS)
++        return -1;
++    int fd;
++    memcpy(&fd, CMSG_DATA(cm), sizeof fd);
++    k->slot_bytes = m.a;
++    k->shm        = mmap(NULL, CAMERA_SLOTS * k->slot_bytes, PROT_READ, MAP_SHARED, fd, 0);
++    close(fd);
++    if (k->shm == MAP_FAILED) {
++        k->shm = NULL;
++        return -1;
++    }
++    return 0;
++}
++
++/* Loop thread: a frame is ready in a slot -> copy it into a PipeWire buffer, release the slot. */
++static void on_stream_io(void *data, int fd, uint32_t mask)
++{
++    struct cam *k = data;
++    if (mask & (SPA_IO_ERR | SPA_IO_HUP)) {
++        pw_loop_destroy_source(pw_thread_loop_get_loop(k->owner->loop), k->io);
++        k->io = NULL;
++        return;
++    }
++    struct cam_stream_msg m;
++    if (recv(fd, &m, sizeof m, 0) != (ssize_t)sizeof m || m.type != CAM_STREAM_READY || m.slot >= CAMERA_SLOTS)
++        return;
++    size_t           bytes = (size_t)m.a * m.b * 3 / 2;
++    struct pw_buffer *b    = k->stream ? pw_stream_dequeue_buffer(k->stream) : NULL;
++    if (b) {
++        struct spa_data *d = &b->buffer->datas[0];
++        if (d->data && m.a == k->w && m.b == k->h && bytes <= d->maxsize && bytes <= k->slot_bytes) {
++            memcpy(d->data, k->shm + (size_t)m.slot * k->slot_bytes, bytes);
++            d->chunk->offset = 0;
++            d->chunk->size   = (uint32_t)bytes;
++            d->chunk->stride = (int32_t)k->w;
++        } else
++            d->chunk->size = 0;
++        pw_stream_queue_buffer(k->stream, b);
++        pw_stream_trigger_process(k->stream); /* we drive the graph: one cycle per camera frame */
++    }
++    stream_send(fd, CAM_STREAM_DONE, m.slot);
++}
++
++/* A Linux app started/stopped streaming from the node: turn the Android camera on/off. */
++static void on_state_changed(void *data, enum pw_stream_state old, enum pw_stream_state state, const char *error)
++{
++    (void)old, (void)error;
++    set_recording(data, state == PW_STREAM_STATE_STREAMING);
++}
++
++static void on_param_changed(void *data, uint32_t id, const struct spa_pod *param)
++{
++    struct cam *k = data;
++    if (id != SPA_PARAM_Format || !param)
++        return;
++    uint8_t                buf[512];
++    struct spa_pod_builder bld = SPA_POD_BUILDER_INIT(buf, sizeof buf);
++    uint32_t               size = k->w * k->h * 3 / 2;
++    const struct spa_pod  *p    = spa_pod_builder_add_object(&bld, SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
++                                                             SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(4, 2, 8),
++                                                             SPA_PARAM_BUFFERS_blocks, SPA_POD_Int(1),
++                                                             SPA_PARAM_BUFFERS_size, SPA_POD_Int(size),
++                                                             SPA_PARAM_BUFFERS_stride, SPA_POD_Int(k->w),
++                                                             SPA_PARAM_BUFFERS_dataType, SPA_POD_Int(1 << SPA_DATA_MemPtr));
++    pw_stream_update_params(k->stream, &p, 1);
++}
++
++static const struct pw_stream_events stream_events = {
++    PW_VERSION_STREAM_EVENTS,
++    .state_changed = on_state_changed,
++    .param_changed = on_param_changed,
++};
++
++static void cam_create_node(struct cam *k)
++{
++    char name[64], desc[64];
++    snprintf(name, sizeof name, "android-camera-%d", k->id);
++    snprintf(desc, sizeof desc, "Android Camera %d", k->id);
++    k->stream = pw_stream_new(g_cam->core, name,
++                              pw_properties_new(PW_KEY_MEDIA_CLASS, "Video/Source", PW_KEY_MEDIA_ROLE, "Camera",
++                                                PW_KEY_NODE_DESCRIPTION, desc, NULL));
++    if (!k->stream)
++        return;
++    pw_stream_add_listener(k->stream, &k->listener, &stream_events, k);
++    uint8_t                buf[512];
++    struct spa_pod_builder bld = SPA_POD_BUILDER_INIT(buf, sizeof buf);
++    const struct spa_pod  *fmt = spa_pod_builder_add_object(
++        &bld, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat, SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video),
++        SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw), SPA_FORMAT_VIDEO_format, SPA_POD_Id(SPA_VIDEO_FORMAT_NV21),
++        SPA_FORMAT_VIDEO_size, SPA_POD_Rectangle(&SPA_RECTANGLE(k->w, k->h)), SPA_FORMAT_VIDEO_framerate,
++        SPA_POD_Fraction(&SPA_FRACTION(FPS, 1)));
++    pw_stream_connect(k->stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_STREAM_FLAG_DRIVER | PW_STREAM_FLAG_MAP_BUFFERS, &fmt, 1);
++    k->io = pw_loop_add_io(pw_thread_loop_get_loop(g_cam->loop), k->stream_fd, SPA_IO_IN | SPA_IO_ERR | SPA_IO_HUP, false,
++                           on_stream_io, k);
++}
++
++void anland_camera_stop(void)
++{
++    struct anland_camera *c = g_cam;
++    if (!c)
++        return;
++    if (!c->loop) {
++        close(c->ctrl_fd);
++        free(c);
++        g_cam = NULL;
++        return;
++    }
++    pw_thread_loop_lock(c->loop);
++    for (int i = 0; i < c->n; i++) {
++        struct cam *k = &c->cams[i];
++        set_recording(k, false);
++        if (k->io)
++            pw_loop_destroy_source(pw_thread_loop_get_loop(c->loop), k->io);
++        if (k->stream)
++            pw_stream_destroy(k->stream);
++        if (k->shm)
++            munmap(k->shm, CAMERA_SLOTS * k->slot_bytes);
++        close(k->stream_fd);
++    }
++    if (c->core)
++        pw_core_disconnect(c->core);
++    pw_thread_loop_unlock(c->loop);
++    pw_thread_loop_stop(c->loop);
++    if (c->context)
++        pw_context_destroy(c->context);
++    pw_thread_loop_destroy(c->loop);
++    close(c->ctrl_fd);
++    free(c);
++    g_cam = NULL;
++}
++
++void anland_camera_set_fds(const int *fds, int n)
++{
++    anland_camera_stop();
++    if (n < 2) {
++        for (int i = 0; i < n; i++)
++            close(fds[i]);
++        return;
++    }
++    struct anland_camera *c = calloc(1, sizeof *c);
++    if (!c)
++        return;
++    c->ctrl_fd = fds[0];
++    c->n       = n - 1 < MAX_CAMERAS ? n - 1 : MAX_CAMERAS;
++    for (int i = c->n + 1; i < n; i++)
++        close(fds[i]);
++
++    /* Camera list and their maximum YUV sizes. */
++    ctrl_send(c, CAMERA_CTRL_GET_INFO, NULL, 0);
++    struct camera_ctrl_msg h;
++    uint8_t                info[1 + MAX_CAMERAS * 4] = {0};
++    if (read_full(c->ctrl_fd, &h, sizeof h, 2000) < 0 || h.type != CAMERA_CTRL_INFO_REPLY || h.len < 1 ||
++        h.len > sizeof info || read_full(c->ctrl_fd, info, h.len, 2000) < 0) {
++        fprintf(stderr, "anland-camera: no camera info from Android\n");
++        for (int i = 0; i < c->n; i++)
++            close(fds[i + 1]);
++        close(c->ctrl_fd);
++        free(c);
++        return;
++    }
++    if (info[0] < c->n)
++        c->n = info[0];
++
++    pw_init(NULL, NULL);
++    c->loop    = pw_thread_loop_new("anland-camera", NULL);
++    c->context = c->loop ? pw_context_new(pw_thread_loop_get_loop(c->loop), NULL, 0) : NULL;
++    c->core    = c->context ? pw_context_connect(c->context, NULL, 0) : NULL;
++    g_cam      = c;
++    for (int i = 0; i < c->n; i++) {
++        struct cam *k = &c->cams[i];
++        uint16_t    mw, mh;
++        memcpy(&mw, info + 1 + i * 4, 2);
++        memcpy(&mh, info + 3 + i * 4, 2);
++        k->owner     = c;
++        k->id        = i;
++        k->stream_fd = fds[i + 1];
++        k->w         = mw && mw < WANT_W ? mw : WANT_W;
++        k->h         = mh && mh < WANT_H ? mh : WANT_H;
++    }
++    if (!c->core) {
++        fprintf(stderr, "anland-camera: no PipeWire\n");
++        anland_camera_stop();
++        return;
++    }
++    for (int i = 0; i < c->n; i++)
++        if (get_shm(&c->cams[i]) < 0)
++            fprintf(stderr, "anland-camera: camera %d: no shared memory\n", i);
++    pw_thread_loop_lock(c->loop);
++    for (int i = 0; i < c->n; i++)
++        if (c->cams[i].shm)
++            cam_create_node(&c->cams[i]);
++    pw_thread_loop_unlock(c->loop);
++    pw_thread_loop_start(c->loop);
++    fprintf(stderr, "anland-camera: %d camera(s) as PipeWire Video/Source\n", c->n);
++}
+diff --git a/src/backend/anland/anland_camera.h b/src/backend/anland/anland_camera.h
+new file mode 100644
+index 0000000..f3c8e9e
+--- /dev/null
++++ b/src/backend/anland/anland_camera.h
+@@ -0,0 +1,29 @@
++#ifndef ANLAND_CAMERA_H
++#define ANLAND_CAMERA_H
++
++/*
++ * Producer-side camera: the Android device's cameras as PipeWire Video/Source nodes
++ * ("Android Camera 0", ...), so Linux apps (browsers, OBS, Cheese) can use them.
++ *
++ * The consumer (the Android app, camera_service.c) hands over its camera service fds
++ * after a resources request: { ctrl, stream_0, .., stream_{N-1} }. A camera is only
++ * opened on Android while some Linux app actually streams from its node.
++ * Frames arrive as NV21 in a shared-memory double buffer (see protocol.h, CAM_*).
++ */
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Take ownership of the service fds (fds[0] = ctrl, then one per camera) and (re)create
++ * the nodes. Replaces any previous set. */
++void anland_camera_set_fds(const int *fds, int n);
++
++/* Drop the fds and nodes (consumer gone). Safe to call when not started. */
++void anland_camera_stop(void);
 +
 +#ifdef __cplusplus
 +}
