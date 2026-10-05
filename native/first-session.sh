@@ -10,5 +10,7 @@ gsettings set org.gnome.desktop.interface gtk-theme "Adwaita-dark"
 gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
 gsettings set org.gnome.desktop.interface icon-theme "Yaru-blue"
 gsettings set org.gnome.desktop.interface gtk-enable-primary-paste true
+# App store (GNOME Software): Flathub for this user (no system helper here; per-user installs, bwrap-flatpak.py runs them).
+flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 # (the welcome notification is Omarchy's own first run's: install-omarchy-android.sh adds the Mobile Apps line)
 mkdir -p "${mark%/*}" && touch "$mark"

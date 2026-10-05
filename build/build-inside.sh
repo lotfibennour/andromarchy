@@ -36,7 +36,7 @@ pacman -U --noconfirm /tmp/mesa/*.pkg.tar.*
 pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
   base-devel git cmake ninja pkgconf python autoconf automake libtool po4a \
   hyprland hyprwayland-scanner wayland-protocols glaze cli11 hwdata libdisplay-info libinput seatd pixman \
-  fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl gnome-keyring libsecret \
+  fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl gnome-keyring libsecret flatpak gnome-software \
   mesa-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc
 
 
