@@ -1676,6 +1676,24 @@ static const char *relative_target(const char *target, int dirfd, const char *li
         return target;
     if (guest_dir_of(dirfd, linkpath, dir, sizeof dir) < 0)
         return target;
+    // Flatpak deployments (.../flatpak/{app,runtime}/<id>/<arch>/<branch>/<commit>/files/...): absolute targets are
+    // CONTAINER paths, /app/... in an app and /usr/... in a runtime (bwrap-flatpak.py mounts files/ there). Made
+    // relative within the deployment. Absolute links across mounts (an app's link into /usr) stay as written.
+    const char *fp = strstr(dir, "/flatpak/app/"), *prefix = "/app";
+    if (!fp && (fp = strstr(dir, "/flatpak/runtime/")))
+        prefix = "/usr";
+    if (fp) {
+        const char *q = strchr(fp + 9, '/') + 1; // after "/flatpak/{app,runtime}/"
+        for (int i = 0; i < 4 && q; i++)        // <id>/<arch>/<branch>/<commit>/
+            q = (q = strchr(q, '/')) ? q + 1 : NULL;
+        if (q && strncmp(q, "files", 5) == 0 && (q[5] == '/' || !q[5])) {
+            size_t pl = strlen(prefix);
+            if (strncmp(t, prefix, pl) != 0 || (t[pl] && t[pl] != '/'))
+                return target; // another mount of the container
+            snprintf(probe, sizeof probe, "%s%s", prefix, q + 5); // the link's directory, as a container path
+            snprintf(dir, sizeof dir, "%s", probe);
+        }
+    }
     // Unpacking another system into a subdirectory (build-rootfs-native.sh): its absolute links mean ITS root.
     const char *sub = getenv("ANDROID_COMPAT_SYMLINK_ROOT");
     size_t sl = sub ? strlen(sub) : 0;

@@ -33,6 +33,14 @@ BINDS = {"--bind", "--bind-try", "--ro-bind", "--ro-bind-try", "--dev-bind", "--
          "--ro-bind-fd"}
 
 
+def debug(msg):
+    """BWRAP_DEBUG=1 or a /var/tmp/bwrap-debug.on file (Flatpak's ldconfig call has an empty environment):
+    decisions appended to /var/tmp/bwrap-debug.log (Flatpak captures some calls' stderr)."""
+    if os.environ.get("BWRAP_DEBUG") or os.path.exists("/var/tmp/bwrap-debug.on"):
+        with open("/var/tmp/bwrap-debug.log", "a") as f:
+            f.write(msg.rstrip(chr(10)) + chr(10))
+
+
 def read_fd(fd):
     data, off = b"", 0
     while True:
@@ -88,6 +96,7 @@ def real(guest):
 class Tree:
     def __init__(self, path):
         self.path = path  # guest path of the tree root
+        self.usr_source = None  # what /usr is bound to (the runtime), for the patched-glibc cache key
         self.excluded = ["/dev", "/proc", "/sys"] + ([RUN] if RUN else [])
         os.makedirs(path)
 
@@ -96,9 +105,13 @@ class Tree:
 
     def mirror(self, link):
         """A symlink to a directory becomes a directory of links to its entries (so the tree can add its own)."""
-        # links were computed between real paths: resolve in real space, then back to a guest path to list it
-        target_real = os.path.normpath(os.path.join(real(os.path.dirname(link)), os.readlink(link)))
-        target = target_real[len(ROOTFS):] if target_real.startswith(ROOTFS + "/") else target_real
+        # bind links hold real host paths (older trees: relative between real paths): back to a guest path to list it
+        t = os.readlink(link)  # an absolute link reads back as a guest path (the wrapper strips the rootfs)
+        if t.startswith("/"):
+            target, target_real = t, real(t)
+        else:
+            target_real = os.path.normpath(os.path.join(real(os.path.dirname(link)), t))
+            target = target_real[len(ROOTFS):] if target_real.startswith(ROOTFS + "/") else target_real
         entries = os.listdir(target)
         os.unlink(link)
         os.mkdir(link, 0o755)
@@ -108,7 +121,7 @@ class Tree:
             if t is not None and not t.startswith("/"):
                 os.symlink(t, os.path.join(link, e))  # relative link: means the container's path, keep it as is
             else:
-                os.symlink(os.path.relpath(os.path.join(target_real, e), real(link)), os.path.join(link, e))
+                raw_symlink(os.path.join(target_real, e), os.path.join(link, e))
 
     def place(self, cpath):
         """The tree path for a container path, every parent a real directory of the tree."""
@@ -142,9 +155,12 @@ class Tree:
         src, dest = os.path.normpath(src), os.path.normpath(dest)
         if any(dest == e or dest.startswith(e + "/") for e in self.excluded):
             return  # passed through as is
+        if dest == "/usr":
+            self.usr_source = src
         p = self.place(dest)
         self.clear(p)
-        os.symlink(os.path.relpath(real(src), real(os.path.dirname(p))), p)
+        raw_symlink(real(src), p)  # absolute host path: "/data" is passed through inside the container
+        debug(f"bwrap: bind {src} -> {dest} at {p}: {os.readlink(p)}")
 
     def symlink(self, target, dest):
         p = self.place(dest)
@@ -166,8 +182,10 @@ class Tree:
             os.makedirs(self.here(dest), exist_ok=True)
             return
         p = self.place(dest)
-        if empty or os.path.islink(p):
+        if empty:  # --tmpfs masks whatever was there
             self.clear(p)
+        elif os.path.lexists(p):  # --dir on an existing path (a bind included) only ensures it exists
+            return
         os.makedirs(p, exist_ok=True)
         if mode is not None:
             os.chmod(p, mode)
@@ -184,6 +202,15 @@ def fd_path(fd):
     return p[len(ROOTFS):] if ROOTFS and p.startswith(ROOTFS + "/") else p
 
 
+def raw_symlink(target, guest_link):
+    """A link to a real host path, created with libc's own symlinkat: the preloaded wrapper would rewrite the target
+    relative to the rootfs, which a container's realpath cannot follow (Zotero: readlink -f "$0" gave ".")."""
+    import ctypes
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    if libc.syscall(36, target.encode(), -100, real(guest_link).encode()) != 0:  # SYS_symlinkat, AT_FDCWD
+        raise OSError(ctypes.get_errno(), f"symlink {guest_link} -> {target}")
+
+
 def raw_execve(path, argv, env):
     """execve straight to the kernel: this process runs under the main rootfs's fakechroot, whose execve would
     rewrite the (real) loader path and run it through Arch's loader. libc's own syscall(), not the preloaded one."""
@@ -197,8 +224,7 @@ def raw_execve(path, argv, env):
 def runtime_glibc(tree):
     """The runtime's ld.so + libc, patched for Android's syscall filter (cached per runtime: keyed by where the
     tree's /usr points; fakechroot's realpath cannot follow the tree's relative links)."""
-    usr = tree.here("/usr")
-    key = os.readlink(usr) if os.path.islink(usr) else usr
+    key = tree.usr_source or tree.here("/usr")  # the runtime's own path: stable across launches
     d = "/opt/lotfix/runtime-glibc/" + hashlib.sha1(key.encode()).hexdigest()[:16]
     if not os.path.exists(d + "/libc.so.6"):
         shutil.rmtree(d, ignore_errors=True)
@@ -233,10 +259,22 @@ def main():
         return fd_path(int(v[0])) if o.endswith("-fd") else v[0]
     flatpak = any(o in BINDS and (v[-1] == "/app" or (v[-1] == "/usr" and os.path.normpath(source(o, v)) != "/usr"))
                   for o, v in ops)
+    if True:
+        debug(f"bwrap: flatpak={flatpak} rootfs={ROOTFS} command={command[:3]}\n")
     if not flatpak or not ROOTFS:
         os.execv(LEGACY, [LEGACY] + sys.argv[1:])
     if not command:
         sys.exit("bwrap: no command")
+
+    # Deployments checked out by libostree had their absolute links made relative to the wrong root (its temporary
+    # checkout dir): repaired once per deployment, the first time it runs (flatpak-fix-links.py).
+    for o, v in ops:
+        if o in BINDS and v[-1] in ("/usr", "/app"):
+            files = source(o, v)
+            stamp = os.path.join(os.path.dirname(files), ".android-links-fixed")
+            if files.endswith("/files") and not os.path.exists(stamp):
+                subprocess.run(["python3", "/opt/lotfix/flatpak-fix-links.py", files], stdout=subprocess.DEVNULL)
+                open(stamp, "w").close()
 
     os.makedirs(STAGE, exist_ok=True)
     tree = Tree(f"{STAGE}/{os.getpid()}")
@@ -286,13 +324,21 @@ def main():
         for o, v in ops:
             if o in BINDS and v[-1].startswith("/run/"):
                 p = tree.here(v[-1])
-                if os.path.islink(p) and os.path.isdir(p):
+                # only those with relative links: a mirrored folder is the tree's own copy, and writes into it
+                # (Flatpak's ld.so cache dir) would no longer reach the bound folder
+                if os.path.islink(p) and os.path.isdir(p) and any(
+                        os.path.islink(os.path.join(p, e)) and not os.readlink(os.path.join(p, e)).startswith("/")
+                        for e in os.listdir(p)):
                     tree.mirror(p)
 
         # Flatpak's first call only builds the runtime's ld.so.cache: our loader is given the library dirs instead.
         if os.path.basename(command[0]) == "ldconfig" and "-C" in command:
             cache = command[command.index("-C") + 1]
             open(tree.here(cache), "w").close()
+            if True:
+                d = tree.here(os.path.dirname(cache))
+                debug(f"bwrap: ldconfig cache {tree.here(cache)} (dir link -> "
+                                 f"{os.readlink(d) if os.path.islink(d) else 'not a link'})\n")
             sys.exit(0)
 
         glibc = runtime_glibc(tree)
@@ -310,7 +356,9 @@ def main():
                 env[k] = os.environ[k]
         env.update({
             "FAKECHROOT": "true", "FAKECHROOT_BASE": T, "FAKECHROOT_ELFLOADER": loader,
-            "FAKECHROOT_EXCLUDE_PATH": ":".join(tree.excluded),
+            # "/data": the tree's links to bound folders are real host paths (/data/user/0/...); no container path
+            # starts with it, and realpath/exec through them then reach real, existing files
+            "FAKECHROOT_EXCLUDE_PATH": ":".join(tree.excluded + ["/data"]),
             "LD_LIBRARY_PATH": libpath, "LD_PRELOAD": f"{compat}:{fc}",
             "GCONV_PATH": T + "/usr/lib/aarch64-linux-gnu/gconv", "TZDIR": T + "/usr/share/zoneinfo",
         })
@@ -357,7 +405,7 @@ def main():
             os.write(fd, (json.dumps({"exit-code": code}) + "\n").encode())
         sys.exit(code)
     finally:
-        if not os.environ.get("BWRAP_KEEP_TREE"):  # debugging: keep the tree to inspect it
+        if not (os.environ.get("BWRAP_KEEP_TREE") or os.path.exists("/var/tmp/bwrap-debug.on")):  # debugging
             shutil.rmtree(tree.path, ignore_errors=True)
 
 
