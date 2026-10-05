@@ -159,9 +159,23 @@ static long do_execve(const char *path, char *const argv[], char *const envp[])
 }
 
 // ---- the trap handler ----
-static int android_blocked(long nr)
+// Every syscall Android's app filter blocks arrives here (SECCOMP_RET_TRAP, si_code SYS_SECCOMP): answer it like a
+// kernel would to an unprivileged user without the feature, instead of letting the process die. Measured on the device
+// with tools/seccomp-probe.c (126 named syscalls). Privileged ones -> EPERM; everything else -> ENOSYS, which
+// libraries treat as an older kernel and fall back from.
+static int android_errno(long nr)
 {
-    return nr == SYS_set_robust_list || nr == SYS_rseq || nr == SYS_faccessat2 || nr == SYS_kcmp;
+    switch (nr) {
+    case SYS_mount: case SYS_umount2: case SYS_chroot: case SYS_vhangup: case SYS_acct: case SYS_kexec_load:
+    case SYS_kexec_file_load: case SYS_init_module: case SYS_finit_module: case SYS_delete_module:
+    case SYS_clock_settime: case SYS_settimeofday: case SYS_adjtimex: case SYS_clock_adjtime: case SYS_sethostname:
+    case SYS_setdomainname: case SYS_swapon: case SYS_swapoff: case SYS_syslog: case SYS_setuid: case SYS_setgid:
+    case SYS_setreuid: case SYS_setregid: case SYS_setresgid: case SYS_setgroups: case SYS_open_tree:
+    case SYS_move_mount: case SYS_fsopen: case SYS_fsconfig: case SYS_fsmount: case SYS_fspick: case SYS_mount_setattr:
+        return EPERM;
+    default:
+        return ENOSYS;
+    }
 }
 
 static void on_sigsys(int sig, siginfo_t *si, void *ctx)
@@ -258,8 +272,8 @@ static void on_sigsys(int sig, siginfo_t *si, void *ctx)
         ret = raw(SYS_rt_sigprocmask, r[0], r[1] ? (long)&set : 0, r[2], r[3]);
         break;
     }
-    default:
-        ret = android_blocked(si->si_syscall) ? -ENOSYS : raw6(si->si_syscall, r[0], r[1], r[2], r[3], r[4], r[5]);
+    default: // blocked by Android (our Go filter only traps the cases above): never re-issue it, it would trap again
+        ret = -android_errno(si->si_syscall);
     }
     if (trace_on) {
         char msg[600];
@@ -397,6 +411,17 @@ void go_syscalls_init(const char *program, const char *self_guest)
             ex = e ? e + 1 : NULL;
         }
     }
+    // Every process: Android-blocked syscalls become errors instead of SIGSYS deaths (see android_errno). The program
+    // may still install its own SIGSYS handler: genuine (non-seccomp) SIGSYS are forwarded to it (sigaction wrapper).
+    if (!active) {
+        struct sigaction sa = {0};
+        sa.sa_sigaction = on_sigsys;
+        sa.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER;
+        sigaction(SIGSYS, &sa, NULL);
+        uint64_t sys = 1ULL << (SIGSYS - 1); // a blocked trap signal kills: make sure it is not inherited blocked
+        raw(SYS_rt_sigprocmask, SIG_UNBLOCK, &sys, 0, 8);
+        active = 1;
+    }
     if (!b || !l || !program || program[0] != '/' || !is_go_binary(program))
         return;
     dl_iterate_phdr(main_text_range, NULL);
@@ -406,11 +431,7 @@ void go_syscalls_init(const char *program, const char *self_guest)
     strncpy(loader, l, sizeof loader - 1);
     if (self_guest)
         strncpy(self_exe_guest, self_guest, sizeof self_exe_guest - 1);
-
-    struct sigaction sa = {0};
-    sa.sa_sigaction = on_sigsys;
-    sa.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER;
-    sigaction(SIGSYS, &sa, NULL);
+    // (the SIGSYS handler is already installed above, for every process)
 
     // BPF: arch check, then for the listed syscalls TRAP iff IP is inside the Go text; rt_sigaction only for SIGSYS.
     struct sock_filter f[128];
@@ -447,7 +468,6 @@ void go_syscalls_init(const char *program, const char *self_guest)
     long nnp = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
     trace_on = getenv("GO_SYSCALLS_TRACE") != NULL;
     long rc = raw(SYS_seccomp, SECCOMP_SET_MODE_FILTER, 0, &prog);
-    active = rc == 0;
     if (getenv("GO_SYSCALLS_DEBUG")) {
         char msg[256];
         int m = snprintf(msg, sizeof msg, "go-syscalls: %s text=%lx-%lx nnp=%ld seccomp=%ld insns=%d\n", program,
