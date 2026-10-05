@@ -81,6 +81,12 @@ chmod +x /usr/local/bin/systemd-cat
 grep -rl 'eDP|LVDS|DSI)' "$OMARCHY_PATH"/bin "$OMARCHY_PATH"/shell | xargs -r sed -i 's/(eDP|LVDS|DSI)/(eDP|LVDS|DSI|ANLAND)/g'
 pacman -S --noconfirm --needed brightnessctl
 
+# Apps menu: submenus (Mobile Apps, written by the app as apps.mobile) before the applications; Omarchy sorts the
+# whole list alphabetically.
+grep -q 'Andromarchy: submenus first' "$OMARCHY_PATH"/shell/plugins/menu/Menu.qml ||
+  sed -i '/if (active === "apps") {/{n;s|$|\n          if ((a.kind === "app") !== (b.kind === "app")) return a.kind === "app" ? 1 : -1 // Andromarchy: submenus first|}' \
+    "$OMARCHY_PATH"/shell/plugins/menu/Menu.qml
+
 # DNS provider (network panel): no NetworkManager/systemd-resolved here; the rootfs's /etc/resolv.conf is written
 # directly (native/omarchy-dns-android.sh). Omarchy's own kept as omarchy-dns.orig.
 cp -a "$OMARCHY_PATH/bin/omarchy-dns" "$OMARCHY_PATH/bin/omarchy-dns.orig"
