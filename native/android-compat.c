@@ -449,6 +449,8 @@ static int fake_sys(const char *p, char *buf, size_t sz)
     return -1;
 }
 
+static int cpuinfo_rewrite(void); // /proc/cpuinfo without SVE-implying core names (below)
+
 // Contents for a denied /proc file, or -1 to pass the path through.
 static int fake_proc(const char *p, char *buf, size_t sz)
 {
@@ -491,6 +493,8 @@ static int fake_proc(const char *p, char *buf, size_t sz)
     if (!p || strncmp(p, "/proc/", 6) != 0)
         return -1;
     p += 6;
+    if (strcmp(p, "cpuinfo") == 0) // contents served by fake_proc_fd (larger than buf)
+        return cpuinfo_rewrite() ? 0 : -1;
     struct timespec t;
     struct sysinfo si;
     struct utsname u;
@@ -516,9 +520,72 @@ static int fake_proc(const char *p, char *buf, size_t sz)
     return -1;
 }
 
+// /proc/cpuinfo: Android kernels may disable SVE for apps (no "sve" in Features) on cores whose model implies it
+// (Cortex-A520/A720/X4...). LLVM picks its target by the core's name (llvm::sys::getHostCPUName from "CPU part")
+// and generated SVE code anyway: Mesa's llvmpipe (Flatpak apps' fallback renderer) died of SIGILL. Without "sve",
+// such parts are shown as their pre-SVE sibling, so JITs stay within NEON. Real file otherwise.
+static char *cpuinfo_fixed; // NULL: no rewrite needed (or not computed yet)
+static int cpuinfo_state;   // 0 unknown, 1 rewrite, 2 pass through
+static int cpuinfo_rewrite(void)
+{
+    if (cpuinfo_state)
+        return cpuinfo_state == 1;
+    cpuinfo_state = 2;
+    int fd = (int)syscall(SYS_openat, AT_FDCWD, "/proc/cpuinfo", O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return 0;
+    static char in[65536];
+    ssize_t len = 0, r;
+    while (len < (ssize_t)sizeof in - 1 && (r = read(fd, in + len, sizeof in - 1 - len)) > 0)
+        len += r;
+    close(fd);
+    in[len > 0 ? len : 0] = 0;
+    char *feat = strstr(in, "Features");
+    char *eol = feat ? strchr(feat, '\n') : NULL;
+    if (!feat || !eol)
+        return 0;
+    *eol = 0;
+    int has_sve = strstr(feat, " sve") != NULL;
+    *eol = '\n';
+    if (has_sve)
+        return 0;
+    static const struct { const char *from, *to; } parts[] = {
+        {"0xd46", "0xd05"}, {"0xd80", "0xd05"}, {"0xd88", "0xd05"},                      // A510/A520/A520AE -> A55
+        {"0xd47", "0xd41"}, {"0xd4d", "0xd41"}, {"0xd81", "0xd41"}, {"0xd87", "0xd41"}, // A710/A715/A720/A725 -> A78
+        {"0xd48", "0xd44"}, {"0xd4e", "0xd44"}, {"0xd82", "0xd44"}, {"0xd85", "0xd44"}, // X2/X3/X4/X925 -> X1
+    };
+    int changed = 0;
+    for (char *p = strstr(in, "CPU part"); p; p = strstr(p + 1, "CPU part")) {
+        char *v = strstr(p, "0x");
+        if (!v || v - p > 16)
+            continue;
+        for (size_t i = 0; i < sizeof parts / sizeof *parts; i++)
+            if (strncmp(v, parts[i].from, 5) == 0) {
+                memcpy(v, parts[i].to, 5);
+                changed = 1;
+                break;
+            }
+    }
+    if (!changed)
+        return 0;
+    cpuinfo_fixed = strdup(in);
+    cpuinfo_state = 1;
+    return 1;
+}
+
 static int fake_proc_fd(const char *path)
 {
     char buf[512];
+    if (path && strcmp(path, "/proc/cpuinfo") == 0 && cpuinfo_rewrite()) {
+        int fd = memfd_create("cpuinfo", MFD_CLOEXEC);
+        size_t n = strlen(cpuinfo_fixed);
+        if (fd >= 0 && write(fd, cpuinfo_fixed, n) == (ssize_t)n && lseek(fd, 0, SEEK_SET) == 0)
+            return fd;
+        if (fd >= 0)
+            close(fd);
+        errno = EACCES;
+        return -1;
+    }
     int n = fake_proc(path, buf, sizeof buf);
     int fd = memfd_create("proc", MFD_CLOEXEC);
     if (fd < 0 || write(fd, buf, n) != n || lseek(fd, 0, SEEK_SET) < 0) {
@@ -1792,4 +1859,52 @@ int ioctl(int fd, unsigned long req, ...)
         return 0;
     }
     return next(fd, req, arg);
+}
+
+// Debug aid: ANDROID_COMPAT_CRASH_REPORT=1 prints where a process dies of SIGILL/SIGSEGV/SIGBUS/SIGTRAP (library,
+// symbol, offset, the instruction word) on stderr, then lets it die as it would have.
+#include <ucontext.h>
+static void crash_report(int sig, siginfo_t *si, void *ctx)
+{
+    ucontext_t *uc = ctx;
+    uintptr_t pc = uc->uc_mcontext.pc;
+    Dl_info di = {0};
+    dladdr((void *)pc, &di);
+    char m[1024];
+    int n = snprintf(m, sizeof m, "[crash] signal %d at pc=%#lx %s+%#lx (%s) insn=%#x addr=%p\n", sig,
+                     (unsigned long)pc, di.dli_fname ? di.dli_fname : "?",
+                     (unsigned long)(pc - (uintptr_t)di.dli_fbase), di.dli_sname ? di.dli_sname : "?",
+                     *(unsigned *)pc, si->si_addr);
+    if (write(2, m, n) < 0) {}
+    if (!di.dli_fname) { // not in a library: which mapping (anonymous, a file, a memfd) holds it
+        int fd = (int)syscall(SYS_openat, AT_FDCWD, "/proc/self/maps", O_RDONLY | O_CLOEXEC);
+        static char buf[4 << 20];
+        ssize_t len = 0, r;
+        while (fd >= 0 && len < (ssize_t)sizeof buf - 1 && (r = read(fd, buf + len, sizeof buf - 1 - len)) > 0)
+            len += r;
+        if (fd >= 0)
+            close(fd);
+        for (char *line = len > 0 ? (buf[len] = 0, buf) : NULL; line && *line;) {
+            char *nl = strchr(line, '\n');
+            unsigned long lo, hi;
+            if (sscanf(line, "%lx-%lx", &lo, &hi) == 2 && pc >= lo && pc < hi) {
+                if (write(2, "[crash] mapping: ", 17) < 0 || write(2, line, nl ? (size_t)(nl - line + 1) : strlen(line)) < 0) {}
+                break;
+            }
+            line = nl ? nl + 1 : NULL;
+        }
+    }
+    signal(sig, SIG_DFL);
+}
+
+__attribute__((constructor)) static void crash_report_init(void)
+{
+    if (!getenv("ANDROID_COMPAT_CRASH_REPORT"))
+        return;
+    struct sigaction sa = {0};
+    sa.sa_sigaction = crash_report;
+    sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+    const int sigs[] = {SIGILL, SIGSEGV, SIGBUS, SIGTRAP};
+    for (unsigned i = 0; i < sizeof sigs / sizeof *sigs; i++)
+        sigaction(sigs[i], &sa, NULL);
 }
