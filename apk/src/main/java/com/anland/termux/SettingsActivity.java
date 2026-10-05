@@ -43,8 +43,6 @@ public class SettingsActivity extends Activity {
     private static final String KEY_BOUND_KEYCODE = "bound_keycode";
     private static final String KEY_SOCKET_PATH = "socket_path";
     private static final String KEY_USE_ROOT = "use_root";
-    private static final String KEY_MIC_ENABLED = "mic_enabled";
-    private static final String KEY_CAMERA_ENABLED = "camera_enabled";
     private static final String KEY_AUDIO_KEEPALIVE = "audio_keepalive";
     private static final String KEY_SPEAKER_LATENCY_MS = "speaker_latency_ms";
     private static final String KEY_MIC_LATENCY_MS = "mic_latency_ms";
@@ -903,46 +901,8 @@ public class SettingsActivity extends Activity {
         rootHint.setPadding(0, dp(4), 0, 0);
         root.addView(rootHint);
 
-        // Forward microphone: capture the device mic and expose it to the Linux
-        // desktop as a recording source. Requires the RECORD_AUDIO permission, which
-        // MainActivity requests when this is on.
-        Switch micSwitch = new Switch(this);
-        micSwitch.setText(R.string.mic_switch);
-        micSwitch.setTextSize(14);
-        micSwitch.setPadding(0, dp(16), 0, 0);
-        micSwitch.setChecked(prefs.getBoolean(KEY_MIC_ENABLED, false));
-        micSwitch.setOnCheckedChangeListener((v, checked) ->
-            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-                .putBoolean(KEY_MIC_ENABLED, checked).apply());
-        root.addView(micSwitch);
-
-        TextView micHint = new TextView(this);
-        micHint.setText(R.string.mic_hint);
-        micHint.setTextSize(12);
-        micHint.setTextColor(getColor(R.color.settings_text_secondary));
-        micHint.setPadding(0, dp(4), 0, 0);
-        root.addView(micHint);
-
-        // Forward camera: expose the device camera(s) to the Linux desktop. When on,
-        // the app pre-creates the camera service resources at startup (CameraX is only
-        // opened once the desktop actually requests a recording). Requires the CAMERA
-        // permission, which MainActivity requests when this is enabled.
-        Switch cameraSwitch = new Switch(this);
-        cameraSwitch.setText(R.string.camera_switch);
-        cameraSwitch.setTextSize(14);
-        cameraSwitch.setPadding(0, dp(16), 0, 0);
-        cameraSwitch.setChecked(prefs.getBoolean(KEY_CAMERA_ENABLED, false));
-        cameraSwitch.setOnCheckedChangeListener((v, checked) ->
-            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-                .putBoolean(KEY_CAMERA_ENABLED, checked).apply());
-        root.addView(cameraSwitch);
-
-        TextView cameraHint = new TextView(this);
-        cameraHint.setText(R.string.camera_hint);
-        cameraHint.setTextSize(12);
-        cameraHint.setTextColor(getColor(R.color.settings_text_secondary));
-        cameraHint.setPadding(0, dp(4), 0, 0);
-        root.addView(cameraHint);
+        // Microphone and camera: always forwarded in Andromarchy (a desktop, like any computer's); Android's own
+        // permission prompts still apply.
 
         // Keep the output stream hot for short Linux UI sounds, or let it
         // idle-stop after silence to save standby power. Disabled by default.

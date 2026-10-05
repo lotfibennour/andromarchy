@@ -67,8 +67,6 @@ public class MainActivity extends Activity
     private static final String KEY_BOUND_KEYCODE = "bound_keycode";
     private static final String KEY_SOCKET_PATH = "socket_path";
     private static final String KEY_USE_ROOT = "use_root";
-    private static final String KEY_MIC_ENABLED = "mic_enabled";
-    private static final String KEY_CAMERA_ENABLED = "camera_enabled";
     // Latency presets in ms; 0 = engine default. Shared with SettingsActivity.
     static final String KEY_SPEAKER_LATENCY_MS = "speaker_latency_ms";
     static final String KEY_MIC_LATENCY_MS = "mic_latency_ms";
@@ -947,17 +945,32 @@ public class MainActivity extends Activity
      * onRequestPermissionsResult finishes the init.
      */
     private void applyCameraState() {
-        boolean want = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .getBoolean(KEY_CAMERA_ENABLED, false);
-        if (!want || cameraInited)
+        // Andromarchy: always on (no settings switch); a camera only opens while a Linux app streams from it.
+        if (cameraInited)
             return;
         if (checkSelfPermission(Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
             CameraServices.nativeInitCameraService(this);
             cameraInited = true;
         } else {
-            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
+            requestDevicePermissions();
         }
+    }
+
+    /** Microphone and camera in ONE prompt: a second request while the first dialog shows is cancelled. */
+    private boolean devicePermissionsAsked;
+
+    private void requestDevicePermissions() {
+        if (devicePermissionsAsked)
+            return;
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (String p : new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA})
+            if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED)
+                missing.add(p);
+        if (missing.isEmpty())
+            return;
+        devicePermissionsAsked = true;
+        requestPermissions(missing.toArray(new String[0]), REQ_RECORD_AUDIO);
     }
 
     /*
@@ -981,18 +994,12 @@ public class MainActivity extends Activity
     }
 
     private void applyMicState() {
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        boolean want = prefs.getBoolean(KEY_MIC_ENABLED, false);
-        if (!want) {
-            Native.nativeSetMicEnabled(false);
-            return;
-        }
+        // Andromarchy: always on (no settings switch).
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED) {
             Native.nativeSetMicEnabled(true);
         } else {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},
-                               REQ_RECORD_AUDIO);
+            requestDevicePermissions();
         }
     }
 
@@ -1000,17 +1007,15 @@ public class MainActivity extends Activity
     public void onRequestPermissionsResult(int requestCode, String[] permissions,
                                            int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_RECORD_AUDIO) {
-            boolean granted = grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            Native.nativeSetMicEnabled(granted);
-        } else if (requestCode == REQ_CAMERA) {
-            boolean granted = grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            if (granted && !cameraInited && getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    .getBoolean(KEY_CAMERA_ENABLED, false)) {
-                CameraServices.nativeInitCameraService(this);
-                cameraInited = true;
+        if (requestCode == REQ_RECORD_AUDIO || requestCode == REQ_CAMERA) {
+            for (int i = 0; i < permissions.length && i < grantResults.length; i++) {
+                boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
+                if (Manifest.permission.RECORD_AUDIO.equals(permissions[i]))
+                    Native.nativeSetMicEnabled(granted);
+                else if (Manifest.permission.CAMERA.equals(permissions[i]) && granted && !cameraInited) {
+                    CameraServices.nativeInitCameraService(this);
+                    cameraInited = true;
+                }
             }
         } else if (requestCode == 1003) {
             if (getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
