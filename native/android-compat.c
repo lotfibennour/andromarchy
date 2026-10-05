@@ -679,10 +679,11 @@ static FILE *guest_maps(FILE *real)
 FOPEN_WRAP(fopen)
 FOPEN_WRAP(fopen64)
 
-// Sources of hard-link fallbacks (section 3b): stat reports 2 links for them, like a real link() would. shadow's
-// lock (useradd, usermod, groupadd...) links a temp file to passwd.lock and checks exactly that ("lock file
-// already used (nlink: 1)"). ponytail: last 8 paths, never forgotten (temp names carry a pid, a reuse is harmless).
-static char linked_copies[8][512];
+// Hard-link fallbacks (section 3b): stat reports 1 + the copies made from a file that still exist, like a real
+// link count. shadow's lock (useradd, usermod...) links a temp file to passwd.lock and checks it went to 2;
+// gnome-keyring links its keyring before each save and checks it went up by one (a stuck "2" aborted it).
+// ponytail: last 16 links remembered; a copy removed since no longer counts (checked with a raw stat).
+static char linked_copies[16][2][512];
 // Under fake root (sudo, ARCH_ROOT=1), libfakeroot answers stat from faked's database, keyed by inode. A file deleted
 // outside fakeroot leaves its record, and a new directory reusing that inode came back as a regular file (git:
 // "unable to unlink ...: Is a directory"). fakeroot owns owners and permissions; the file TYPE is the kernel's.
@@ -703,10 +704,13 @@ static mode_t real_type(int dirfd, const char *path, int flags)
 
 static int linked_copy(const char *path)
 {
-    for (int i = 0; path && i < 8; i++)
-        if (linked_copies[i][0] && strcmp(linked_copies[i], path) == 0)
-            return 1;
-    return 0;
+    int n = 0;
+    struct stat k;
+    for (int i = 0; path && i < 16; i++)
+        if (linked_copies[i][0][0] && strcmp(linked_copies[i][0], path) == 0 &&
+            syscall(SYS_newfstatat, AT_FDCWD, linked_copies[i][1], &k, 0) == 0)
+            n++;
+    return n;
 }
 
 // stat/access on the faked /proc files: programs test them before opening (LibreOffice: "/proc not mounted").
@@ -723,8 +727,8 @@ static int linked_copy(const char *path)
         int r = next(path, st);                                                                                        \
         if (r == 0)                                                                                                    \
             FIX_TYPE(st, AT_FDCWD, path, strncmp(#name, "lstat", 5) == 0 ? AT_SYMLINK_NOFOLLOW : 0);                   \
-        if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
-            st->st_nlink = 2;                                                                                          \
+        if (r == 0 && st->st_nlink == 1)                                                                               \
+            st->st_nlink += linked_copy(path);                                                                         \
         return r < 0 && (errno == EACCES || errno == ENOENT) && IS_UPTIME(path) ? next("/proc/self/stat", st) : r;                          \
     }
 STAT_WRAP(stat, struct stat)
@@ -742,8 +746,8 @@ STAT_WRAP(lstat64, struct stat64)
         int r = next(dirfd, path, st, flags);                                                                          \
         if (r == 0)                                                                                                    \
             FIX_TYPE(st, dirfd, path, flags);                                                                          \
-        if (r == 0 && st->st_nlink == 1 && linked_copy(path))                                                          \
-            st->st_nlink = 2;                                                                                          \
+        if (r == 0 && st->st_nlink == 1)                                                                               \
+            st->st_nlink += linked_copy(path);                                                                         \
         return r < 0 && (errno == EACCES || errno == ENOENT) && IS_UPTIME(path) ? next(AT_FDCWD, "/proc/self/stat", st, flags) : r;         \
     }
 FSTATAT_WRAP(fstatat, struct stat)
@@ -803,8 +807,11 @@ int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int fla
     if (r < 0 && (errno == EACCES || errno == EPERM)) {
         r = copy_excl(olddirfd, old, newdirfd, new);
         static int slot;
-        if (r == 0 && olddirfd == AT_FDCWD && strlen(old) < sizeof linked_copies[0])
-            strcpy(linked_copies[slot++ % 8], old);
+        if (r == 0 && olddirfd == AT_FDCWD && newdirfd == AT_FDCWD && strlen(old) < sizeof linked_copies[0][0] &&
+            strlen(new) < sizeof linked_copies[0][1]) {
+            strcpy(linked_copies[slot % 16][0], old);
+            strcpy(linked_copies[slot++ % 16][1], new);
+        }
     }
     return r;
 }

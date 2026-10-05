@@ -90,6 +90,7 @@ public class SessionService extends Service {
 
         // Battery for the session's UPower stand-in (android-upower): apps cannot read /sys/class/power_supply.
         registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        startLocation(this);
         // Active network for the NetworkManager stand-in (android-nm): apps cannot see the interfaces.
         getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(network);
         // Requests from Linux for Android-only actions (Wi-Fi panel, launching Android apps).
@@ -150,6 +151,20 @@ public class SessionService extends Service {
                 + " && break; sleep 0.1; done; exec android-nm"), archEnv(run, sock));
         spawn("android-upower", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/system_bus\" ]"
                 + " && break; sleep 0.1; done; exec android-upower"), archEnv(run, sock));
+        // The other system services a desktop expects (login1, hostname1, timedate1, locale1, PolicyKit, power
+        // profiles, Accounts, RealtimeKit, GeoClue), as stand-ins: native/android-system-services.py.
+        spawn("android-system-services", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/"
+                + "system_bus\" ] && break; sleep 0.1; done; exec android-system-services"), archEnv(run, sock));
+        // Session side: ScreenSaver inhibit and FileManager1 (native/android-session-services.py), and the secrets
+        // keyring (passwords for browsers, VS Code, git). No login screen unlocks a keyring here: a password-less
+        // "login" keyring is created once (gnome-keyring's plain format) and made the default.
+        spawn("android-session-services", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/"
+                + "bus\" ] && break; sleep 0.1; done; exec android-session-services"), archEnv(run, sock));
+        spawn("gnome-keyring", List.of(launcher, "-c", "for i in $(seq 50); do [ -S \"$XDG_RUNTIME_DIR/bus\" ] && break;"
+                + " sleep 0.1; done; K=$HOME/.local/share/keyrings; mkdir -p $K && chmod 700 $K;"
+                + " [ -f $K/login.keyring ] || printf '[keyring]\\ndisplay-name=Login\\nctime=0\\nmtime=0\\n"
+                + "lock-on-idle=false\\nlock-after=false\\n' > $K/login.keyring; [ -f $K/default ] || printf login > $K/default;"
+                + " exec gnome-keyring-daemon --foreground --components=secrets < /dev/null"), archEnv(run, sock));
 
         // 2c. Hardware video (termux-va, third_party/): decodes and encodes with MediaCodec for the VA-API bridge.
         spawn("termux-va", List.of(libDir + "/libtermuxva.so", "--sock", new File(run, "termux-va.sock").getPath()),
@@ -213,7 +228,9 @@ public class SessionService extends Service {
     private AndroidRequests requests;
     private AndroidApps apps;
 
-    private final ConnectivityManager.NetworkCallback network = new ConnectivityManager.NetworkCallback() {
+    // FLAG_INCLUDE_LOCATION_INFO: the Wi-Fi name (SSID) instead of "<unknown ssid>", once location is granted.
+    private final ConnectivityManager.NetworkCallback network = new ConnectivityManager.NetworkCallback(
+            ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO) {
         @Override
         public void onLinkPropertiesChanged(Network n, android.net.LinkProperties lp) {
             StringBuilder dns = new StringBuilder(); // for omarchy-dns "DHCP": the network's own DNS servers
@@ -257,6 +274,32 @@ public class SessionService extends Service {
     }
 
     /** Android battery state -> run/battery ("<percent> <charging 0|1>"), read by android-upower. */
+    /** Android's network location -> run/location ("lat lon accuracy unixtime"), served as GeoClue2 by
+     *  android-system-services. Network provider: coarse, cheap on battery; every 10 minutes or 500 m. Called again
+     *  by MainActivity once the permission is granted. */
+    static void startLocation(Context ctx) {
+        if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            return;
+        android.location.LocationManager lm = ctx.getSystemService(android.location.LocationManager.class);
+        String provider = lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+                ? android.location.LocationManager.NETWORK_PROVIDER : android.location.LocationManager.PASSIVE_PROVIDER;
+        android.location.LocationListener l = loc -> {
+            File f = new File(runDir(ctx), "location"), tmp = new File(runDir(ctx), ".location");
+            try (java.io.FileWriter w = new java.io.FileWriter(tmp)) {
+                w.write(loc.getLatitude() + " " + loc.getLongitude() + " " + loc.getAccuracy() + " "
+                        + loc.getTime() / 1000 + "\n");
+            } catch (IOException e) {
+                return;
+            }
+            tmp.renameTo(f);
+        };
+        android.location.Location last = lm.getLastKnownLocation(provider);
+        if (last != null)
+            l.onLocationChanged(last);
+        lm.requestLocationUpdates(provider, 10 * 60 * 1000L, 500f, l, android.os.Looper.getMainLooper());
+    }
+
     private final BroadcastReceiver battery = new BroadcastReceiver() {
         @Override
         public void onReceive(Context ctx, Intent i) {

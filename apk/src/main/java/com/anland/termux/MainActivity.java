@@ -957,14 +957,15 @@ public class MainActivity extends Activity
         }
     }
 
-    /** Microphone and camera in ONE prompt: a second request while the first dialog shows is cancelled. */
+    /** Microphone, camera and location in ONE prompt: a second request while the first dialog shows is cancelled. */
     private boolean devicePermissionsAsked;
 
     private void requestDevicePermissions() {
         if (devicePermissionsAsked)
             return;
         java.util.List<String> missing = new java.util.ArrayList<>();
-        for (String p : new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA})
+        for (String p : new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
             if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED)
                 missing.add(p);
         if (missing.isEmpty())
@@ -1012,6 +1013,8 @@ public class MainActivity extends Activity
                 boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
                 if (Manifest.permission.RECORD_AUDIO.equals(permissions[i]))
                     Native.nativeSetMicEnabled(granted);
+                else if (Manifest.permission.ACCESS_COARSE_LOCATION.equals(permissions[i]) && granted)
+                    SessionService.startLocation(this);
                 else if (Manifest.permission.CAMERA.equals(permissions[i]) && granted && !cameraInited) {
                     CameraServices.nativeInitCameraService(this);
                     cameraInited = true;

@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- GeoClue2 (location for Linux apps) and the Wi-Fi name, which Android redacts without it -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Andromarchy session (SessionService): foreground service + wake lock, or HyperOS kills it -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

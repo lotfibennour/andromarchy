@@ -36,7 +36,7 @@ pacman -U --noconfirm /tmp/mesa/*.pkg.tar.*
 pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
   base-devel git cmake ninja pkgconf python autoconf automake libtool po4a \
   hyprland hyprwayland-scanner wayland-protocols glaze cli11 hwdata libdisplay-info libinput seatd pixman \
-  fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl \
+  fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl gnome-keyring libsecret \
   mesa-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc
 
 
@@ -106,6 +106,9 @@ install -m 755 $L/native/udevadm-shim.sh /usr/local/bin/udevadm
 install -m 644 $L/native/system-bus.conf /opt/lotfix/system-bus.conf
 install -m 755 $L/native/android-upower.py /usr/local/bin/android-upower
 install -m 755 $L/native/android-nm.py /usr/local/bin/android-nm
+# The other services a desktop expects on D-Bus (tools/dbus-probe.sh): system and session stand-ins.
+install -m 755 $L/native/android-system-services.py /usr/local/bin/android-system-services
+install -m 755 $L/native/android-session-services.py /usr/local/bin/android-session-services
 # Linux -> Android requests (Wi-Fi panel, launching Android apps): the app watches run/android-request.
 install -m 755 $L/native/android-request.sh /usr/local/bin/android-request
 # First boot on the device (SessionService runs it: uid, machine-id, locale, setup form answers) and first session.
