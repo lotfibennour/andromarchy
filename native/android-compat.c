@@ -273,6 +273,85 @@ int memfd_create(const char *name, unsigned int flags)
     return next(name, flags);
 }
 
+// 3'''. O_TMPFILE: an anonymous file that linkat("/proc/self/fd/N") later gives a name (libostree writes every object
+//       this way: Flatpak installs; glnx, systemd, GLib's atomic writes too). Android's SELinux refuses that linkat
+//       (EACCES) and cannot re-open the file through /proc, so a copy fallback has nothing to read. Emulate: a hidden
+//       real file in the same directory; linkat on its fd renames it into place (RENAME_NOREPLACE: link's EEXIST
+//       semantics), close() removes it if it was never linked.
+// ponytail: a crash leaves a ".tmpfile-<pid>-<n>" behind; dup()ed fds are not followed; only the creating process
+//           removes it (a forked child closing its copy of the fd must not delete the parent's file).
+#include <sys/syscall.h>
+// Debug aid: ANDROID_COMPAT_TRACE_OPEN=1 prints every failing open/openat ("open dirfd path flags -> result") on
+// stderr; any other value is a path fragment whose opens are printed whatever their result.
+static void trace_open(const char *fn, int dirfd, const char *path, int flags, int r)
+{
+    static const char *want;
+    static int init;
+    if (!init) {
+        want = getenv("ANDROID_COMPAT_TRACE_OPEN");
+        init = 1;
+    }
+    if (!want)
+        return;
+    int all = strcmp(want, "1") != 0;
+    if (all ? !(path && strstr(path, want)) : r >= 0)
+        return;
+    int e = errno;
+    char m[1200];
+    int n = snprintf(m, sizeof m, "[trace] pid=%d %s dirfd=%d path=%s flags=0x%x -> %d (errno %d)\n", (int)getpid(), fn,
+                     dirfd, path ? path : "(null)", flags, r, r < 0 ? e : 0);
+    if (write(2, m, n) < 0) {}
+    errno = e;
+}
+
+#ifndef RENAME_NOREPLACE
+#define RENAME_NOREPLACE 1
+#endif
+static struct {
+    char *path;
+    pid_t pid;
+} tmpfiles[CR_FDS];
+static int guest_dir_of(int dirfd, const char *linkpath, char *out, size_t len); // defined with symlinks (3d)
+
+static int tmpfile_open(int dirfd, const char *dir, int flags, mode_t mode)
+{
+    static unsigned counter;
+    char probe[4096], gdir[4096], name[4200];
+    snprintf(probe, sizeof probe, "%s/x", dir && *dir ? dir : ".");
+    if (guest_dir_of(dirfd, probe, gdir, sizeof gdir) < 0)
+        return -1;
+    snprintf(name, sizeof name, "%s/.tmpfile-%d-%u", gdir, (int)getpid(), __atomic_fetch_add(&counter, 1, __ATOMIC_RELAXED));
+    int fd = open(name, (flags & ~O_TMPFILE) | O_CREAT | O_EXCL, mode);
+    if (fd < 0)
+        return -1;
+    if (fd >= CR_FDS) {
+        unlink(name); // cannot track it: a plain anonymous file (cannot be linked later)
+        return fd;
+    }
+    free(tmpfiles[fd].path);
+    tmpfiles[fd].path = strdup(name);
+    tmpfiles[fd].pid = getpid();
+    return fd;
+}
+
+// linkat() of an emulated O_TMPFILE: returns 1 when handled (result in *r, errno set on failure).
+static int tmpfile_link(int olddirfd, const char *old, int newdirfd, const char *new, int flags, int *r)
+{
+    int fd = -1;
+    if (old && strncmp(old, "/proc/self/fd/", 14) == 0 && old[14] >= '0' && old[14] <= '9')
+        fd = atoi(old + 14);
+    else if ((flags & AT_EMPTY_PATH) && old && !*old)
+        fd = olddirfd;
+    if (fd < 0 || fd >= CR_FDS || !tmpfiles[fd].path || tmpfiles[fd].pid != getpid())
+        return 0;
+    *r = syscall(SYS_renameat2, AT_FDCWD, tmpfiles[fd].path, newdirfd, new, RENAME_NOREPLACE) == 0 ? 0 : -1;
+    if (*r == 0) {
+        free(tmpfiles[fd].path);
+        tmpfiles[fd].path = NULL;
+    }
+    return 1;
+}
+
 int close(int fd)
 {
     static int (*next)(int);
@@ -282,6 +361,11 @@ int close(int fd)
         unlink(cr_paths[fd]);
         free(cr_paths[fd]);
         cr_paths[fd] = NULL;
+    }
+    if (fd >= 0 && fd < CR_FDS && tmpfiles[fd].path && tmpfiles[fd].pid == getpid()) {
+        unlink(tmpfiles[fd].path); // never linked: anonymous, as O_TMPFILE promises
+        free(tmpfiles[fd].path);
+        tmpfiles[fd].path = NULL;
     }
     return next(fd);
 }
@@ -577,7 +661,10 @@ MKSTEMP_WRAP(mkostemp64, (char *tmpl, int flags), (tmpl, flags))
         va_start(ap, flags);                                                                                            \
         mode_t mode = va_arg(ap, mode_t);                                                                               \
         va_end(ap);                                                                                                     \
+        if ((flags & O_TMPFILE) == O_TMPFILE)                                                                           \
+            return tmpfile_open(AT_FDCWD, path, flags, mode);                                                           \
         int r = next(path, flags, mode);                                                                                \
+        trace_open(#name, AT_FDCWD, path, flags, r);                                                                    \
         return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPEN_WRAP(open)
@@ -597,7 +684,10 @@ OPEN_WRAP(open64)
         va_start(ap, flags);                                                                                            \
         mode_t mode = va_arg(ap, mode_t);                                                                               \
         va_end(ap);                                                                                                     \
+        if ((flags & O_TMPFILE) == O_TMPFILE)                                                                           \
+            return tmpfile_open(dirfd, path, flags, mode);                                                              \
         int r = next(dirfd, path, flags, mode);                                                                         \
+        trace_open(#name, dirfd, path, flags, r);                                                                       \
         return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPENAT_WRAP(openat)
@@ -615,6 +705,7 @@ OPENAT_WRAP(openat64)
         if (!next)                                                                                                      \
             next = dlsym(RTLD_NEXT, #name);                                                                             \
         int r = next(path, flags);                                                                                      \
+        trace_open(#name, AT_FDCWD, path, flags, r);                                                                    \
         return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPEN2_WRAP(__open_2)
@@ -631,6 +722,7 @@ OPEN2_WRAP(__open64_2)
         if (!next)                                                                                                      \
             next = dlsym(RTLD_NEXT, #name);                                                                             \
         int r = next(dirfd, path, flags);                                                                               \
+        trace_open(#name, dirfd, path, flags, r);                                                                       \
         return r < 0 && (errno == EACCES || errno == ENOENT) ? reopen_or_fail(path) : r;                                                     \
     }
 OPENAT2_WRAP(__openat_2)
@@ -803,7 +895,10 @@ int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int fla
     static int (*next)(int, const char *, int, const char *, int);
     if (!next)
         next = dlsym(RTLD_NEXT, "linkat");
-    int r = next(olddirfd, old, newdirfd, new, flags);
+    int r;
+    if (tmpfile_link(olddirfd, old, newdirfd, new, flags, &r))
+        return r;
+    r = next(olddirfd, old, newdirfd, new, flags);
     if (r < 0 && (errno == EACCES || errno == EPERM)) {
         r = copy_excl(olddirfd, old, newdirfd, new);
         static int slot;
@@ -1679,6 +1774,15 @@ int ioctl(int fd, unsigned long req, ...)
     va_end(ap);
     if (!next)
         next = dlsym(RTLD_NEXT, "ioctl");
+    // Copy-on-write clones (FICLONE, FICLONERANGE, FIDEDUPERANGE): Android's ioctl allowlist answers EACCES, which
+    // callers read as a temporary failure and retry on every file (libostree re-checks and re-opens its repo config for
+    // each object it writes: hundreds of times per install). A filesystem without the feature answers EOPNOTSUPP, and
+    // callers then ask once and fall back to copying (cp --reflink=auto does too).
+    if (req == 0x40049409UL /* FICLONE */ || req == 0x4020940dUL /* FICLONERANGE */ ||
+        req == 0xc0189436UL /* FIDEDUPERANGE */) {
+        errno = EOPNOTSUPP;
+        return -1;
+    }
     if (req == LOTFIX_DRM_IOCTL_VERSION && arg && is_kgsl_fd(fd)) {
         struct lotfix_drm_version *v = arg;
         v->version_major = 1, v->version_minor = 12, v->version_patchlevel = 0;
