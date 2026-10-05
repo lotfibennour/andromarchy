@@ -97,21 +97,23 @@ static void chromium_no_sandbox(int argc, char **argv)
         if (asprintf(&np, "%s%s%s", pre ? pre : "", pre ? ":" : "", shim) >= 0)
             setenv("LD_PRELOAD", np, 1);
     }
-    char **av = calloc(argc + 5, sizeof *av);
+    char **av = calloc(argc + 6, sizeof *av);
     if (!av)
         return;
     int n = 0;
     av[n++] = argv[0];
     av[n++] = "--no-sandbox";
+    // Cameras are PipeWire nodes here (the Anland backend's Android cameras; no /dev/video*): the portal path.
+    // (one --enable-features: Chromium keeps only the last one)
+    av[n++] = va ? "--enable-features=WebRtcPipeWireCamera,AcceleratedVideoDecodeLinuxGL,"
+                   "AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder,VaapiIgnoreDriverChecks"
+                 : "--enable-features=WebRtcPipeWireCamera";
     if (kgsl) {
         av[n++] = "--render-node-override=/dev/kgsl-3d0";
         // Decoded video in NV12 GBM buffers on KGSL showed green stripes (a row layout Chromium does not expect):
         // video frames go to ordinary textures, everything else stays on the GPU path.
         av[n++] = "--disable-gpu-memory-buffer-video-frames";
     }
-    if (va)
-        av[n++] = "--enable-features=AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,"
-                  "VaapiVideoDecoder,VaapiIgnoreDriverChecks";
     for (int i = 1; i < argc; i++)
         av[n++] = argv[i];
     execv(prog, av); // through fakechroot and the loader; only returns on failure, then run as is

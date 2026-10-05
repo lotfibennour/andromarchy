@@ -1543,10 +1543,10 @@ index 0000000..5acf1f1
 +#endif
 diff --git a/src/backend/anland/anland_camera.c b/src/backend/anland/anland_camera.c
 new file mode 100644
-index 0000000..ce1cc5e
+index 0000000..6c90429
 --- /dev/null
 +++ b/src/backend/anland/anland_camera.c
-@@ -0,0 +1,330 @@
+@@ -0,0 +1,331 @@
 +#define _GNU_SOURCE
 +#include "anland_camera.h"
 +
@@ -1762,6 +1762,7 @@ index 0000000..ce1cc5e
 +    snprintf(desc, sizeof desc, "Android Camera %d", k->id);
 +    k->stream = pw_stream_new(g_cam->core, name,
 +                              pw_properties_new(PW_KEY_MEDIA_CLASS, "Video/Source", PW_KEY_MEDIA_ROLE, "Camera",
++                                                PW_KEY_NODE_NAME, name, PW_KEY_NODE_NICK, desc,
 +                                                PW_KEY_NODE_DESCRIPTION, desc, NULL));
 +    if (!k->stream)
 +        return;
