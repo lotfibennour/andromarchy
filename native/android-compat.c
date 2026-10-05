@@ -52,6 +52,8 @@ void go_syscalls_init(const char *program, const char *self_guest);
 //     one by one, recognize any Chromium-based program by what it ships next to its binary (chrome-sandbox or
 //     chrome_crashpad_handler) and re-exec it once with --no-sandbox; it passes the switch on to its children.
 //     Same trade-off as Firefox's sandboxes (MOZ_DISABLE_*_SANDBOX in lotfix-run).
+//     Also --render-node-override=/dev/kgsl-3d0: no DRM render node for apps, so Chromium composited in software;
+//     Mesa's GBM works on the KGSL device (DRM_IOCTL_VERSION answered by the ioctl wrapper below): GPU compositing.
 static int has_file(const char *dir, const char *name)
 {
     char p[4096];
@@ -77,13 +79,20 @@ static void chromium_no_sandbox(int argc, char **argv)
     for (int i = 1; i < argc; i++)
         if (strcmp(argv[i], "--no-sandbox") == 0 || strncmp(argv[i], "--type=", 7) == 0)
             return; // already done, or a child process (the browser forwards the switch)
-    char **av = calloc(argc + 2, sizeof *av);
+    int kgsl = access("/dev/kgsl-3d0", R_OK | W_OK) == 0;
+    for (int i = 1; i < argc && kgsl; i++)
+        if (strncmp(argv[i], "--render-node-override", 22) == 0)
+            kgsl = 0; // the user's own choice
+    char **av = calloc(argc + 3, sizeof *av);
     if (!av)
         return;
-    av[0] = argv[0];
-    av[1] = "--no-sandbox";
+    int n = 0;
+    av[n++] = argv[0];
+    av[n++] = "--no-sandbox";
+    if (kgsl)
+        av[n++] = "--render-node-override=/dev/kgsl-3d0";
     for (int i = 1; i < argc; i++)
-        av[i + 1] = argv[i];
+        av[n++] = argv[i];
     execv(prog, av); // through fakechroot and the loader; only returns on failure, then run as is
     free(av);
 }
@@ -1559,4 +1568,57 @@ int socket(int domain, int type, int protocol)
     if (!next)
         next = dlsym(RTLD_NEXT, "socket");
     return next(domain, type, protocol);
+}
+
+// DRM_IOCTL_VERSION on Qualcomm's KGSL GPU device: Android gives apps no DRM render node, but Mesa allocates GBM
+// buffers (dmabufs) on /dev/kgsl-3d0. Chromium/Electron (--render-node-override=/dev/kgsl-3d0) first ask the node's
+// DRM version and abort without one; answer as the msm driver (freedreno's) so GPU compositing can start.
+struct lotfix_drm_version {
+    int    version_major, version_minor, version_patchlevel;
+    size_t name_len;
+    char  *name;
+    size_t date_len;
+    char  *date;
+    size_t desc_len;
+    char  *desc;
+};
+#define LOTFIX_DRM_IOCTL_VERSION _IOWR('d', 0x00, struct lotfix_drm_version)
+
+static int is_kgsl_fd(int fd)
+{
+    char p[64], t[256];
+    snprintf(p, sizeof p, "/proc/self/fd/%d", fd);
+    ssize_t n = syscall(SYS_readlinkat, AT_FDCWD, p, t, sizeof t - 1); // raw: no path rewriting needed
+    if (n <= 0)
+        return 0;
+    t[n] = 0;
+    return strstr(t, "/dev/kgsl") != NULL;
+}
+
+static void drm_str(char *dst, size_t *len, const char *s)
+{
+    size_t n = strlen(s);
+    if (dst && *len)
+        memcpy(dst, s, *len < n ? *len : n);
+    *len = n;
+}
+
+int ioctl(int fd, unsigned long req, ...)
+{
+    static int (*next)(int, unsigned long, ...);
+    va_list ap;
+    va_start(ap, req);
+    void *arg = va_arg(ap, void *);
+    va_end(ap);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "ioctl");
+    if (req == LOTFIX_DRM_IOCTL_VERSION && arg && is_kgsl_fd(fd)) {
+        struct lotfix_drm_version *v = arg;
+        v->version_major = 1, v->version_minor = 12, v->version_patchlevel = 0;
+        drm_str(v->name, &v->name_len, "msm");
+        drm_str(v->date, &v->date_len, "20130625");
+        drm_str(v->desc, &v->desc_len, "MSM Snapdragon DRM (KGSL)");
+        return 0;
+    }
+    return next(fd, req, arg);
 }
