@@ -57,13 +57,16 @@ inside_installed "set -euo pipefail
 fi
 
 echo "== 2/3 build-inside.sh (new rootfs, native)"
-ARCH_ROOTFS=$N ARCH_ROOT=1 ARCH_EXCLUDE_EXTRA=$RUN XDG_RUNTIME_DIR=$RUN "$LAUNCHER" \
+# PACK_ONLY=1 (with RESUME=1): the new rootfs is complete, only pack it again.
+[ -n "${PACK_ONLY:-}" ] || ARCH_ROOTFS=$N ARCH_ROOT=1 ARCH_EXCLUDE_EXTRA=$RUN XDG_RUNTIME_DIR=$RUN "$LAUNCHER" \
   -c "export LOTFIX_NATIVE=1 OMARCHY_REF=${OMARCHY_REF:-}; bash /tmp/lotfix/build-inside.sh"
 
 echo "== 3/3 pack (installed rootfs)"
 inside_installed "set -euo pipefail
   rm -rf $G/rootfs/tmp/lotfix $G/rootfs/var/cache/pacman/pkg/* $G/rootfs/etc/resolv.conf
   rm -f $G/rootfs/etc/machine-id && touch $G/rootfs/etc/machine-id # first-boot.sh makes this device's
+  # Files no one may read (dbus-daemon-launch-helper is 4110): tar runs as the app, their real owner. Readable.
+  find $G/rootfs -xdev ! -perm -u+r \\( -type f -o -type d \\) -exec chmod u+r {} +
   tar --numeric-owner --hard-dereference -C $G/rootfs -I 'gzip -6' -cf $G/out/lotfix-rootfs.tar.gz .
   cd $G/out && sha256sum lotfix-rootfs.tar.gz | tee lotfix-rootfs.tar.gz.sha256"
 echo "done: $B/out"
