@@ -42,7 +42,9 @@ pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
 
 
 # fakeroot over TCP: Android has no SysV IPC.
-mkdir -p /tmp/fr && tar -xzf $L/fakeroot.tar.gz -C /tmp/fr --strip-components=1
+rm -rf /tmp/fr && mkdir -p /tmp/fr && tar -xzf $L/fakeroot.tar.gz -C /tmp/fr --strip-components=1
+# A forked child gets a fresh lock and its own faked connection (cargo deadlocked at fork under sudo).
+for p in $L/patches/fakeroot/*.patch; do patch -d /tmp/fr -p1 < "$p"; done
 (cd /tmp/fr && ./configure --prefix=/usr/local --with-ipc=tcp && make -j"$(nproc)" && make install)
 
 # aquamarine (Andromarchy backend) + Hyprland (our patches), compiled natively by build-hyprland.sh: over Arch's copies.

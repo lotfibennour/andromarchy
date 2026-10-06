@@ -1,0 +1,28 @@
+diff --git a/communicate.c b/communicate.c
+--- a/communicate.c
++++ b/communicate.c
+@@ -504,6 +504,24 @@
+   pthread_mutex_unlock(&comm_sd_mutex);
+ }
+ 
++/* Andromarchy: a multithreaded program (cargo) that forks while another thread talks to faked left the child
++   blocked on comm_sd_mutex forever (and sharing the parent's socket). In the child: a fresh lock, and its own
++   connection, opened on first use. */
++static void comm_sd_atfork_child(void)
++{
++  pthread_mutex_t fresh = PTHREAD_MUTEX_INITIALIZER;
++  comm_sd_mutex = fresh;
++  if (comm_sd >= 0) {
++    close(comm_sd);
++    comm_sd = -1;
++  }
++}
++
++__attribute__((constructor)) static void comm_sd_atfork_init(void)
++{
++  pthread_atfork(NULL, NULL, comm_sd_atfork_child);
++}
++
+ #endif /* FAKEROOT_FAKENET */
+ 
+ #ifndef FAKEROOT_FAKENET
