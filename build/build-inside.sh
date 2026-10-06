@@ -164,6 +164,16 @@ git -C /tmp/mesa-src checkout -q ef25369b9c
 (cd /tmp/mesa-src && meson setup build --prefix=/usr --buildtype=release -Dplatforms=x11,wayland   -Dgallium-drivers=freedreno,zink,virgl,llvmpipe -Dgallium-va=enabled -Dgallium-rusticl=false -Dvulkan-drivers=freedreno   -Dfreedreno-kmds=kgsl -Dvulkan-layers= -Dgles1=disabled -Dgles2=enabled -Dglx=dri -Degl=enabled -Dvalgrind=disabled   -Dlibunwind=disabled -Dtools= -Dvideo-codecs=all && ninja -C build && ninja -C build install)
 rm -rf /tmp/mesa-src
 
+# XWayland with GPU acceleration without /dev/dri (glamor + DRI3 on KGSL surfaceless): lfdevs's patches
+# (lfdevs/xwayland, test/support-xwayland-surfaceless) on the official 24.1.13. In /usr/local/bin, first in PATH:
+# Arch's xorg-xwayland stays as installed (pacman never touches ours).
+pacman -S --noconfirm --needed xtrans xorgproto libxkbfile xorg-font-util libxfont2 libxcvt libdecor libtirpc libei
+git clone -q --depth 1 -b xwayland-24.1.13 https://gitlab.freedesktop.org/xorg/xserver.git /tmp/xwayland
+for p in $L/patches/xwayland/*.patch; do git -C /tmp/xwayland apply "$p"; done
+(cd /tmp/xwayland && meson setup build --prefix=/usr --buildtype=release -Dxvfb=false -Dxdmcp=false -Dglamor=true   -Dxkb_dir=/usr/share/X11/xkb -Dxkb_output_dir=/var/lib/xkb && ninja -C build)
+install -m 755 /tmp/xwayland/build/hw/xwayland/Xwayland /usr/local/bin/Xwayland
+rm -rf /tmp/xwayland
+
 # Protection of our own builds across pacman transactions (native/andromarchy-protect.py): a record of every
 # protected file; the hook puts them back after any install/upgrade/removal.
 install -m 755 $L/native/andromarchy-protect.py /usr/local/bin/andromarchy-protect

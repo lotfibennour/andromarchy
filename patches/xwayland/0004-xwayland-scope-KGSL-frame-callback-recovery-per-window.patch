@@ -1,0 +1,75 @@
+From: lfdevs <lfdevs@lfdevs.com>
+Date: Thu, 9 Jul 2026 00:21:05 +0800
+Subject: xwayland: scope KGSL frame callback recovery per window
+
+Keep the KGSL stale frame callback recovery path, but track blocked frame
+callbacks per Xwayland window instead of using a global counter.
+
+This avoids one busy or stuck window advancing the recovery threshold for
+another window during multi-window workloads or rapid resize. Reset the
+counter when a frame callback arrives normally, and also after damage is
+posted successfully for that window.
+---
+ hw/xwayland/xwayland-screen.c | 8 ++++----
+ hw/xwayland/xwayland-window.c | 1 +
+ hw/xwayland/xwayland-window.h | 1 +
+ 3 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/hw/xwayland/xwayland-screen.c b/hw/xwayland/xwayland-screen.c
+index dc82bc1..2516f2d 100644
+--- a/hw/xwayland/xwayland-screen.c
++++ b/hw/xwayland/xwayland-screen.c
+@@ -437,7 +437,6 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
+     struct xorg_list commit_window_list;
+ #ifdef XWL_HAS_GLAMOR
+     Bool kgsl = xwl_glamor_is_kgsl_surfaceless(xwl_screen);
+-    static unsigned int kgsl_frame_block_count;
+ #endif
+ 
+     xorg_list_init(&commit_window_list);
+@@ -449,10 +448,10 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
+         if (xwl_window->frame_callback) {
+ #ifdef XWL_HAS_GLAMOR
+             if (kgsl) {
+-                kgsl_frame_block_count++;
+-                if ((kgsl_frame_block_count % 64) != 0) {
++                xwl_window->blocked_frame_callback_count++;
++                if (xwl_window->blocked_frame_callback_count < 64)
+                     continue;
+-                }
++                xwl_window->blocked_frame_callback_count = 0;
+                 wl_callback_destroy(xwl_window->frame_callback);
+                 xwl_window->frame_callback = NULL;
+                 xwl_window->force_refresh_wl_buffer = TRUE;
+@@ -469,6 +468,7 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
+         }
+ 
+         xwl_window_post_damage(xwl_window);
++        xwl_window->blocked_frame_callback_count = 0;
+         xorg_list_del(&xwl_window->link_damage);
+         xorg_list_append(&xwl_window->link_damage, &commit_window_list);
+     }
+diff --git a/hw/xwayland/xwayland-window.c b/hw/xwayland/xwayland-window.c
+index 3ea9abb..b5ff3c5 100644
+--- a/hw/xwayland/xwayland-window.c
++++ b/hw/xwayland/xwayland-window.c
+@@ -1908,6 +1908,7 @@ frame_callback(void *data,
+ 
+     wl_callback_destroy (xwl_window->frame_callback);
+     xwl_window->frame_callback = NULL;
++    xwl_window->blocked_frame_callback_count = 0;
+ 
+     if (xwl_window->xwl_screen->present) {
+         xwl_present_for_each_frame_callback(xwl_window, xwl_present_frame_callback);
+diff --git a/hw/xwayland/xwayland-window.h b/hw/xwayland/xwayland-window.h
+index c8c5380..752ed2d 100644
+--- a/hw/xwayland/xwayland-window.h
++++ b/hw/xwayland/xwayland-window.h
+@@ -89,6 +89,7 @@ struct xwl_window {
+     struct wl_callback *frame_callback;
+     Bool allow_commits;
+     Bool force_refresh_wl_buffer;
++    unsigned int blocked_frame_callback_count;
+     struct xorg_list window_buffers_available;
+     struct xorg_list window_buffers_unavailable;
+     OsTimerPtr window_buffers_timer;

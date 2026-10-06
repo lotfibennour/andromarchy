@@ -1,0 +1,772 @@
+From: lfdevs <lfdevs@lfdevs.com>
+Date: Wed, 8 Jul 2026 13:59:56 +0800
+Subject: xwayland/glamor: add KGSL surfaceless backend path
+
+Add an explicit KGSL surfaceless glamor path alongside the existing
+GBM/DRM backend. The GBM path remains the default, while
+XWAYLAND_FORCE_KGSL_SURFACELESS forces surfaceless EGL and
+XWAYLAND_KGSL_SURFACELESS allows falling back to it after GBM setup
+fails.
+
+In KGSL surfaceless mode, Xwayland allocates regular glamor textures,
+creates EGLImages from them, exports dma-bufs with
+EGL_MESA_image_dma_buf_export, and submits those buffers through
+linux-dmabuf. DRI3 direct rendering and DRM syncobj support are disabled
+for this backend because there is no usable DRM render node in the PRoot
+KGSL environment.
+
+This keeps the normal DRM/GBM path unchanged for chroot and desktop
+setups while allowing PRoot Xwayland to use Mesa KGSL for internal
+glamor acceleration.
+---
+ hw/xwayland/xwayland-glamor-gbm.c | 556 ++++++++++++++++++++++++++++++++++----
+ 1 file changed, 503 insertions(+), 53 deletions(-)
+
+diff --git a/hw/xwayland/xwayland-glamor-gbm.c b/hw/xwayland/xwayland-glamor-gbm.c
+index 95b17fc..fd9f2de 100644
+--- a/hw/xwayland/xwayland-glamor-gbm.c
++++ b/hw/xwayland/xwayland-glamor-gbm.c
+@@ -32,7 +32,9 @@
+ 
+ #include <fcntl.h>
+ #include <errno.h>
++#include <inttypes.h>
+ #include <poll.h>
++#include <stdint.h>
+ #include <stdlib.h>
+ #ifdef DRI3
+ #include <sys/eventfd.h>
+@@ -65,7 +67,36 @@
+ #include "linux-dmabuf-unstable-v1-client-protocol.h"
+ #include "linux-drm-syncobj-v1-client-protocol.h"
+ 
++#ifndef EGL_PLATFORM_SURFACELESS_MESA
++#define EGL_PLATFORM_SURFACELESS_MESA 0x31DD
++#endif
++
++#ifndef EGL_GL_TEXTURE_2D_KHR
++#define EGL_GL_TEXTURE_2D_KHR 0x30B1
++#endif
++
++#ifndef EGL_GL_TEXTURE_LEVEL_KHR
++#define EGL_GL_TEXTURE_LEVEL_KHR 0x30BC
++#endif
++
++#ifndef EGL_IMAGE_PRESERVED_KHR
++#define EGL_IMAGE_PRESERVED_KHR 0x30D2
++#endif
++
++typedef EGLBoolean (*xwl_egl_export_dmabuf_image_query_mesa_proc)
++    (EGLDisplay dpy, EGLImage image, int *fourcc, int *num_planes,
++     uint64_t *modifiers);
++typedef EGLBoolean (*xwl_egl_export_dmabuf_image_mesa_proc)
++    (EGLDisplay dpy, EGLImage image, int *fds, EGLint *strides,
++     EGLint *offsets);
++
++enum xwl_glamor_backend {
++    XWL_GLAMOR_BACKEND_GBM,
++    XWL_GLAMOR_BACKEND_KGSL_SURFACELESS,
++};
++
+ struct xwl_gbm_private {
++    enum xwl_glamor_backend backend;
+     drmDevice *device;
+     char *device_name;
+     struct gbm_device *gbm;
+@@ -76,6 +107,8 @@ struct xwl_gbm_private {
+     Bool glamor_gles;
+     Bool implicit_sync;
+     Bool supports_syncobjs;
++    xwl_egl_export_dmabuf_image_query_mesa_proc export_dmabuf_image_query;
++    xwl_egl_export_dmabuf_image_mesa_proc export_dmabuf_image;
+ 
+     /* Set if wl_drm is available */
+     struct wl_drm *drm;
+@@ -106,6 +139,23 @@ xwl_gbm_get(struct xwl_screen *xwl_screen)
+                             &xwl_gbm_private_key);
+ }
+ 
++static Bool
++xwl_glamor_env_is_enabled(const char *name)
++{
++    const char *value = getenv(name);
++
++    return value && *value && *value != '0';
++}
++
++static Bool
++xwl_glamor_is_kgsl_surfaceless(struct xwl_screen *xwl_screen)
++{
++    struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
++
++    return xwl_gbm &&
++        xwl_gbm->backend == XWL_GLAMOR_BACKEND_KGSL_SURFACELESS;
++}
++
+ Bool
+ xwl_glamor_has_wl_drm(struct xwl_screen *xwl_screen)
+ {
+@@ -323,6 +373,95 @@ error:
+     return NULL;
+ }
+ 
++static Bool
++xwl_glamor_pixmap_needs_wl_buffer(struct xwl_screen *xwl_screen,
++                                  int width, int height, int depth,
++                                  unsigned int hint)
++{
++    return width > 0 && height > 0 && depth >= 15 &&
++        (hint == CREATE_PIXMAP_USAGE_BACKING_PIXMAP ||
++         hint == CREATE_PIXMAP_USAGE_SHARED ||
++         (xwl_screen->rootless && hint == 0));
++}
++
++static PixmapPtr
++xwl_glamor_kgsl_create_pixmap(struct xwl_screen *xwl_screen,
++                              int width, int height, int depth,
++                              unsigned int hint)
++{
++    PixmapPtr pixmap;
++    struct xwl_pixmap *xwl_pixmap;
++    unsigned int texture;
++
++    pixmap = glamor_create_pixmap(xwl_screen->screen, width, height, depth,
++                                  hint);
++    if (!pixmap)
++        return NULL;
++
++    if (!xwl_glamor_pixmap_needs_wl_buffer(xwl_screen, width, height, depth,
++                                           hint))
++        return pixmap;
++
++    xwl_glamor_egl_make_current(xwl_screen);
++    texture = glamor_get_pixmap_texture(pixmap);
++    if (!texture) {
++        glamor_destroy_pixmap(pixmap);
++        return NULL;
++    }
++
++    xwl_pixmap = calloc(1, sizeof(*xwl_pixmap));
++    if (!xwl_pixmap) {
++        glamor_destroy_pixmap(pixmap);
++        return NULL;
++    }
++
++    xwl_pixmap->image = EGL_NO_IMAGE_KHR;
++    xwl_pixmap->texture = texture;
++    xwl_pixmap->implicit_modifier = FALSE;
++#if defined(XWL_HAS_GLAMOR) && defined(DRI3)
++    xwl_pixmap->efd = -1;
++#endif /* defined(XWL_HAS_GLAMOR) && defined(DRI3) */
++    xwl_pixmap_set_private(pixmap, xwl_pixmap);
++
++    if (xwl_screen->rootless && hint == CREATE_PIXMAP_USAGE_BACKING_PIXMAP)
++        glamor_clear_pixmap(pixmap);
++
++    return pixmap;
++}
++
++static Bool
++xwl_glamor_kgsl_ensure_pixmap_private(PixmapPtr pixmap)
++{
++    struct xwl_screen *xwl_screen = xwl_screen_get(pixmap->drawable.pScreen);
++    struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
++    unsigned int texture;
++
++    if (xwl_pixmap)
++        return TRUE;
++
++    if (!xwl_glamor_is_kgsl_surfaceless(xwl_screen))
++        return FALSE;
++
++    xwl_glamor_egl_make_current(xwl_screen);
++    texture = glamor_get_pixmap_texture(pixmap);
++    if (!texture)
++        return FALSE;
++
++    xwl_pixmap = calloc(1, sizeof(*xwl_pixmap));
++    if (!xwl_pixmap)
++        return FALSE;
++
++    xwl_pixmap->image = EGL_NO_IMAGE_KHR;
++    xwl_pixmap->texture = texture;
++    xwl_pixmap->implicit_modifier = FALSE;
++#if defined(XWL_HAS_GLAMOR) && defined(DRI3)
++    xwl_pixmap->efd = -1;
++#endif /* defined(XWL_HAS_GLAMOR) && defined(DRI3) */
++    xwl_pixmap_set_private(pixmap, xwl_pixmap);
++
++    return TRUE;
++}
++
+ static PixmapPtr
+ xwl_glamor_gbm_create_pixmap_internal(struct xwl_screen *xwl_screen,
+                                       DrawablePtr drawable,
+@@ -336,10 +475,12 @@ xwl_glamor_gbm_create_pixmap_internal(struct xwl_screen *xwl_screen,
+     uint32_t num_modifiers = 0;
+     uint64_t *modifiers = NULL;
+ 
+-    if (width > 0 && height > 0 && depth >= 15 &&
+-        (hint == CREATE_PIXMAP_USAGE_BACKING_PIXMAP ||
+-         hint == CREATE_PIXMAP_USAGE_SHARED ||
+-         (xwl_screen->rootless && hint == 0))) {
++    if (xwl_glamor_is_kgsl_surfaceless(xwl_screen))
++        return xwl_glamor_kgsl_create_pixmap(xwl_screen, width, height,
++                                             depth, hint);
++
++    if (xwl_glamor_pixmap_needs_wl_buffer(xwl_screen, width, height, depth,
++                                          hint)) {
+         uint32_t format = gbm_format_for_depth(depth, xwl_gbm->glamor_gles);
+         Bool implicit = FALSE;
+ 
+@@ -457,7 +598,8 @@ xwl_glamor_gbm_destroy_pixmap(PixmapPtr pixmap)
+         if (xwl_pixmap->buffer)
+             wl_buffer_destroy(xwl_pixmap->buffer);
+ 
+-        eglDestroyImageKHR(xwl_screen->egl_display, xwl_pixmap->image);
++        if (xwl_pixmap->image != EGL_NO_IMAGE_KHR)
++            eglDestroyImageKHR(xwl_screen->egl_display, xwl_pixmap->image);
+         if (xwl_pixmap->bo)
+            gbm_bo_destroy(xwl_pixmap->bo);
+         xwl_glamor_gbm_dispose_syncpts(pixmap);
+@@ -541,6 +683,116 @@ init_buffer_params_fallback(struct xwl_pixmap *xwl_pixmap,
+     return TRUE;
+ }
+ 
++static Bool
++init_buffer_params_kgsl_surfaceless(struct xwl_screen *xwl_screen,
++                                    PixmapPtr          pixmap,
++                                    uint32_t          *format,
++                                    uint64_t          *modifier,
++                                    int               *num_planes,
++                                    int               *prime_fds,
++                                    uint32_t          *strides,
++                                    uint32_t          *offsets)
++{
++    struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
++    struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
++    EGLint image_attrs[] = {
++        EGL_GL_TEXTURE_LEVEL_KHR, 0,
++        EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
++        EGL_NONE
++    };
++    uint64_t modifiers[4] = {
++        DRM_FORMAT_MOD_INVALID,
++        DRM_FORMAT_MOD_INVALID,
++        DRM_FORMAT_MOD_INVALID,
++        DRM_FORMAT_MOD_INVALID
++    };
++    EGLint egl_strides[4];
++    EGLint egl_offsets[4];
++    int fourcc;
++    int i;
++
++    if (!xwl_pixmap || !xwl_pixmap->texture ||
++        !xwl_gbm->export_dmabuf_image_query ||
++        !xwl_gbm->export_dmabuf_image)
++        return FALSE;
++
++    xwl_glamor_egl_make_current(xwl_screen);
++
++    if (xwl_pixmap->image == EGL_NO_IMAGE_KHR) {
++        xwl_pixmap->image =
++            eglCreateImageKHR(xwl_screen->egl_display,
++                              xwl_screen->egl_context,
++                              EGL_GL_TEXTURE_2D_KHR,
++                              (EGLClientBuffer)(uintptr_t)xwl_pixmap->texture,
++                              image_attrs);
++        if (xwl_pixmap->image == EGL_NO_IMAGE_KHR) {
++            ErrorF("Xwayland glamor: failed to create KGSL EGLImage\n");
++            return FALSE;
++        }
++    }
++
++    glFinish();
++
++    if (!xwl_gbm->export_dmabuf_image_query(xwl_screen->egl_display,
++                                            xwl_pixmap->image,
++                                            &fourcc, num_planes,
++                                            modifiers)) {
++        ErrorF("Xwayland glamor: failed to query KGSL dma-buf export\n");
++        return FALSE;
++    }
++
++    if (*num_planes <= 0 || *num_planes > 4) {
++        ErrorF("Xwayland glamor: unsupported KGSL dma-buf plane count %d\n",
++               *num_planes);
++        return FALSE;
++    }
++
++    *modifier = modifiers[0];
++    for (i = 0; i < *num_planes; i++) {
++        if (modifiers[i] != *modifier) {
++            ErrorF("Xwayland glamor: per-plane KGSL modifiers differ\n");
++            return FALSE;
++        }
++    }
++
++    if (*modifier != DRM_FORMAT_MOD_LINEAR &&
++        *modifier != DRM_FORMAT_MOD_INVALID) {
++        ErrorF("Xwayland glamor: KGSL exported unsupported modifier 0x%" PRIx64 "\n",
++               *modifier);
++        return FALSE;
++    }
++
++    for (i = 0; i < *num_planes; i++)
++        prime_fds[i] = -1;
++
++    if (!xwl_gbm->export_dmabuf_image(xwl_screen->egl_display,
++                                      xwl_pixmap->image,
++                                      prime_fds, egl_strides,
++                                      egl_offsets)) {
++        for (i = 0; i < *num_planes; i++) {
++            if (prime_fds[i] >= 0) {
++                close(prime_fds[i]);
++                prime_fds[i] = -1;
++            }
++        }
++        ErrorF("Xwayland glamor: failed to export KGSL dma-buf\n");
++        return FALSE;
++    }
++
++    for (i = 0; i < *num_planes; i++) {
++        if (prime_fds[i] < 0) {
++            while (--i >= 0)
++                close(prime_fds[i]);
++            return FALSE;
++        }
++        strides[i] = egl_strides[i];
++        offsets[i] = egl_offsets[i];
++    }
++
++    *format = fourcc;
++    return TRUE;
++}
++
+ struct wl_buffer *
+ xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
+ {
+@@ -556,39 +808,58 @@ xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
+     uint32_t offsets[4];
+     uint64_t modifier;
+     int i;
++    static Bool logged_kgsl_dmabuf_buffer;
++    static Bool logged_kgsl_linear_unadvertised;
+ 
+-    if (xwl_pixmap == NULL)
++    if (xwl_pixmap == NULL &&
++        !xwl_glamor_kgsl_ensure_pixmap_private(pixmap))
+        return NULL;
++    xwl_pixmap = xwl_pixmap_get(pixmap);
+ 
+     if (xwl_pixmap->buffer) {
++        if (xwl_glamor_is_kgsl_surfaceless(xwl_screen)) {
++            xwl_glamor_egl_make_current(xwl_screen);
++            glFinish();
++        }
+         /* Buffer already exists. */
+         return xwl_pixmap->buffer;
+     }
+ 
+-    if (!xwl_pixmap->bo)
++    if (!xwl_pixmap->bo && !xwl_glamor_is_kgsl_surfaceless(xwl_screen))
+        return NULL;
+ 
+-    format = wl_drm_format_for_depth(pixmap->drawable.depth);
++    if (xwl_glamor_is_kgsl_surfaceless(xwl_screen)) {
++        if (!init_buffer_params_kgsl_surfaceless(xwl_screen, pixmap,
++                                                 &format,
++                                                 &modifier,
++                                                 &num_planes,
++                                                 prime_fds,
++                                                 strides,
++                                                 offsets))
++            return NULL;
++    } else {
++        format = wl_drm_format_for_depth(pixmap->drawable.depth);
+ 
+ #ifdef GBM_BO_WITH_MODIFIERS
+-    if (!xwl_pixmap->implicit_modifier) {
+-        if (!init_buffer_params_with_modifiers(xwl_pixmap,
+-                                               &modifier,
+-                                               &num_planes,
+-                                               prime_fds,
+-                                               strides,
+-                                               offsets))
+-            return NULL;
+-    } else
++        if (!xwl_pixmap->implicit_modifier) {
++            if (!init_buffer_params_with_modifiers(xwl_pixmap,
++                                                   &modifier,
++                                                   &num_planes,
++                                                   prime_fds,
++                                                   strides,
++                                                   offsets))
++                return NULL;
++        } else
+ #endif
+-    {
+-        if (!init_buffer_params_fallback(xwl_pixmap,
+-                                         &modifier,
+-                                         &num_planes,
+-                                         prime_fds,
+-                                         strides,
+-                                         offsets))
+-            return NULL;
++        {
++            if (!init_buffer_params_fallback(xwl_pixmap,
++                                             &modifier,
++                                             &num_planes,
++                                             prime_fds,
++                                             strides,
++                                             offsets))
++                return NULL;
++        }
+     }
+ 
+     /* An implicit-modifier buffer (DRM_FORMAT_MOD_INVALID) is never listed in
+@@ -601,9 +872,19 @@ xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
+      * path directly instead of rejecting it. */
+     if (xwl_screen->dmabuf &&
+         (modifier == DRM_FORMAT_MOD_INVALID ||
++         (xwl_glamor_is_kgsl_surfaceless(xwl_screen) &&
++          modifier == DRM_FORMAT_MOD_LINEAR) ||
+          xwl_glamor_is_modifier_supported(xwl_screen, format, modifier))) {
+         struct zwp_linux_buffer_params_v1 *params;
+ 
++        if (xwl_glamor_is_kgsl_surfaceless(xwl_screen) &&
++            modifier == DRM_FORMAT_MOD_LINEAR &&
++            !xwl_glamor_is_modifier_supported(xwl_screen, format, modifier) &&
++            !logged_kgsl_linear_unadvertised) {
++            ErrorF("linux-dmabuf: submitting KGSL LINEAR dmabuf without advertised modifier\n");
++            logged_kgsl_linear_unadvertised = TRUE;
++        }
++
+         params = zwp_linux_dmabuf_v1_create_params(xwl_screen->dmabuf);
+         for (i = 0; i < num_planes; i++) {
+             zwp_linux_buffer_params_v1_add(params, prime_fds[i], i,
+@@ -629,9 +910,20 @@ xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
+         close(prime_fds[i]);
+ 
+     /* Add our listener now */
+-    if (xwl_pixmap->buffer)
++    if (xwl_pixmap->buffer) {
+         wl_buffer_add_listener(xwl_pixmap->buffer,
+                                &xwl_glamor_gbm_buffer_listener, pixmap);
++        if (xwl_glamor_is_kgsl_surfaceless(xwl_screen) &&
++            !logged_kgsl_dmabuf_buffer) {
++            ErrorF("linux-dmabuf: created wl_buffer from KGSL dmabuf\n");
++            logged_kgsl_dmabuf_buffer = TRUE;
++        }
++    }
++    else if (xwl_glamor_is_kgsl_surfaceless(xwl_screen)) {
++        ErrorF("linux-dmabuf: failed to create wl_buffer from KGSL dmabuf "
++               "(format=0x%" PRIx32 ", modifier=0x%" PRIx64 ")\n",
++               format, modifier);
++    }
+ 
+     return xwl_pixmap->buffer;
+ }
+@@ -651,7 +943,7 @@ xwl_glamor_gbm_cleanup(struct xwl_screen *xwl_screen)
+     if (xwl_gbm->device_name)
+         free(xwl_gbm->device_name);
+     drmFreeDevice(&xwl_gbm->device);
+-    if (xwl_gbm->drm_fd)
++    if (xwl_gbm->drm_fd >= 0)
+         close(xwl_gbm->drm_fd);
+     if (xwl_gbm->drm)
+         wl_drm_destroy(xwl_gbm->drm);
+@@ -783,6 +1075,9 @@ glamor_pixmap_from_fds(ScreenPtr screen, CARD8 num_fds, const int *fds,
+         strides[0] < width * bpp / 8)
+        goto error;
+ 
++    if (xwl_glamor_is_kgsl_surfaceless(xwl_screen))
++       goto error;
++
+     /* Some freedreno/kgsl mesa builds (the on-device dev tree) rewrite a
+      * LINEAR modifier (0) to a bogus 1274 (0x4FA) in the loader_dri3
+      * pixmap_from_buffers path. 1274 is not a valid DRM modifier, so the
+@@ -858,6 +1153,9 @@ glamor_egl_fds_from_pixmap(ScreenPtr screen, PixmapPtr pixmap, int *fds,
+     if (xwl_pixmap == NULL)
+        return 0;
+ 
++    if (xwl_glamor_is_kgsl_surfaceless(xwl_screen_get(screen)))
++       return 0;
++
+     if (!xwl_pixmap->bo)
+        return 0;
+ 
+@@ -933,6 +1231,9 @@ xwl_glamor_dmabuf_export_sync_file(PixmapPtr pixmap)
+ 
+ #ifdef DMA_BUF_IOCTL_EXPORT_SYNC_FILE
+     xwl_pixmap = xwl_pixmap_get(pixmap);
++    if (!xwl_pixmap || !xwl_pixmap->bo)
++        return -1;
++
+     num_planes = gbm_bo_get_plane_count(xwl_pixmap->bo);
+ 
+     for (p = 0; p < num_planes; ++p) {
+@@ -986,6 +1287,11 @@ xwl_glamor_dmabuf_import_sync_file(PixmapPtr pixmap, int sync_file)
+ 
+ #ifdef DMA_BUF_IOCTL_IMPORT_SYNC_FILE
+     xwl_pixmap = xwl_pixmap_get(pixmap);
++    if (!xwl_pixmap || !xwl_pixmap->bo) {
++        close(sync_file);
++        return;
++    }
++
+     num_planes = gbm_bo_get_plane_count(xwl_pixmap->bo);
+ 
+     for (p = 0; p < num_planes; ++p) {
+@@ -1434,8 +1740,16 @@ xwl_screen_set_syncobj_interface(struct xwl_screen *xwl_screen,
+ static Bool
+ xwl_glamor_gbm_has_egl_extension(void)
+ {
+-    return (epoxy_has_egl_extension(NULL, "EGL_MESA_platform_gbm") ||
+-            epoxy_has_egl_extension(NULL, "EGL_KHR_platform_gbm"));
++    Bool has_gbm = epoxy_has_egl_extension(NULL, "EGL_MESA_platform_gbm") ||
++        epoxy_has_egl_extension(NULL, "EGL_KHR_platform_gbm");
++
++    if (xwl_glamor_env_is_enabled("XWAYLAND_FORCE_KGSL_SURFACELESS") ||
++        xwl_glamor_env_is_enabled("XWAYLAND_KGSL_SURFACELESS")) {
++        return has_gbm ||
++            epoxy_has_egl_extension(NULL, "EGL_MESA_platform_surfaceless");
++    }
++
++    return has_gbm;
+ }
+ 
+ #ifdef DRI3
+@@ -1736,20 +2050,161 @@ xwl_glamor_gbm_init_main_dev(struct xwl_screen *xwl_screen)
+     return TRUE;
+ }
+ 
++static void
++xwl_glamor_gbm_reset_egl(struct xwl_screen *xwl_screen)
++{
++    struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
++
++    if (xwl_screen->egl_display != EGL_NO_DISPLAY) {
++        xwl_glamor_maybe_destroy_context(xwl_screen);
++        eglTerminate(xwl_screen->egl_display);
++        xwl_screen->egl_display = EGL_NO_DISPLAY;
++    }
++
++    if (xwl_gbm->gbm) {
++        gbm_device_destroy(xwl_gbm->gbm);
++        xwl_gbm->gbm = NULL;
++    }
++    if (xwl_gbm->device_name) {
++        free(xwl_gbm->device_name);
++        xwl_gbm->device_name = NULL;
++    }
++    drmFreeDevice(&xwl_gbm->device);
++    xwl_gbm->device = NULL;
++    if (xwl_gbm->drm_fd >= 0) {
++        close(xwl_gbm->drm_fd);
++        xwl_gbm->drm_fd = -1;
++    }
++
++    xwl_gbm->fd_render_node = FALSE;
++    xwl_gbm->dmabuf_capable = FALSE;
++    xwl_gbm->supports_syncobjs = FALSE;
++    xwl_gbm->export_dmabuf_image_query = NULL;
++    xwl_gbm->export_dmabuf_image = NULL;
++}
++
++static Bool
++xwl_glamor_validate_renderer(void)
++{
++    const GLubyte *renderer = glGetString(GL_RENDERER);
++
++    if (!renderer) {
++        ErrorF("glGetString() returned NULL, your GL is broken\n");
++        return FALSE;
++    }
++    if (strstr((const char *)renderer, "softpipe")) {
++        ErrorF("Refusing to try glamor on softpipe\n");
++        return FALSE;
++    }
++    if (!strncmp("llvmpipe", (const char *)renderer, strlen("llvmpipe"))) {
++        ErrorF("Refusing to try glamor on llvmpipe\n");
++        return FALSE;
++    }
++    if (!epoxy_has_gl_extension("GL_OES_EGL_image")) {
++        ErrorF("GL_OES_EGL_image not available\n");
++        return FALSE;
++    }
++
++    return TRUE;
++}
++
++static Bool
++xwl_glamor_kgsl_surfaceless_init_egl(struct xwl_screen *xwl_screen)
++{
++    struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
++    EGLint major, minor;
++    const char *egl_vendor;
++
++    if (!xwl_screen->dmabuf) {
++        ErrorF("Xwayland glamor: KGSL surfaceless requires linux-dmabuf\n");
++        return FALSE;
++    }
++
++    xwl_gbm->backend = XWL_GLAMOR_BACKEND_KGSL_SURFACELESS;
++    xwl_screen->egl_display =
++        glamor_egl_get_display(EGL_PLATFORM_SURFACELESS_MESA,
++                               EGL_DEFAULT_DISPLAY);
++    if (xwl_screen->egl_display == EGL_NO_DISPLAY) {
++        ErrorF("Xwayland glamor: surfaceless EGL display setup failed\n");
++        return FALSE;
++    }
++
++    if (!eglInitialize(xwl_screen->egl_display, &major, &minor)) {
++        ErrorF("Xwayland glamor: surfaceless eglInitialize() failed\n");
++        goto error;
++    }
++
++    if (!xwl_glamor_try_big_gl_api(xwl_screen) &&
++        !xwl_glamor_try_gles_api(xwl_screen)) {
++        ErrorF("Cannot use neither GL nor GLES2\n");
++        goto error;
++    }
++
++    if (!xwl_glamor_validate_renderer())
++        goto error;
++
++    if (!epoxy_has_egl_extension(xwl_screen->egl_display,
++                                 "EXT_image_dma_buf_import") ||
++        !epoxy_has_egl_extension(xwl_screen->egl_display,
++                                 "MESA_image_dma_buf_export")) {
++        ErrorF("Xwayland glamor: KGSL surfaceless dma-buf export extensions unavailable\n");
++        goto error;
++    }
++
++    xwl_gbm->export_dmabuf_image_query =
++        (xwl_egl_export_dmabuf_image_query_mesa_proc)
++        eglGetProcAddress("eglExportDMABUFImageQueryMESA");
++    xwl_gbm->export_dmabuf_image =
++        (xwl_egl_export_dmabuf_image_mesa_proc)
++        eglGetProcAddress("eglExportDMABUFImageMESA");
++    if (!xwl_gbm->export_dmabuf_image_query ||
++        !xwl_gbm->export_dmabuf_image) {
++        ErrorF("Xwayland glamor: KGSL surfaceless dma-buf export entrypoints unavailable\n");
++        goto error;
++    }
++
++    xwl_gbm->dmabuf_capable = TRUE;
++    xwl_gbm->glamor_gles = !epoxy_is_desktop_gl();
++    xwl_gbm->implicit_sync = TRUE;
++    xwl_gbm->supports_syncobjs = FALSE;
++    xwl_screen->glvnd_vendor = "mesa";
++
++    if (xwl_screen->explicit_sync) {
++        wp_linux_drm_syncobj_manager_v1_destroy(xwl_screen->explicit_sync);
++        xwl_screen->explicit_sync = NULL;
++    }
++
++    egl_vendor = eglQueryString(xwl_screen->egl_display, EGL_VENDOR);
++    ErrorF("Xwayland glamor: using KGSL surfaceless EGL backend (%s)\n",
++           egl_vendor ? egl_vendor : "unknown vendor");
++    return TRUE;
++
++error:
++    xwl_glamor_gbm_reset_egl(xwl_screen);
++    xwl_gbm->backend = XWL_GLAMOR_BACKEND_GBM;
++    return FALSE;
++}
++
+ Bool
+ xwl_glamor_gbm_init_egl(struct xwl_screen *xwl_screen)
+ {
+     struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
+     EGLint major, minor;
+-    const GLubyte *renderer;
+     const char *gbm_backend_name, *egl_vendor;
++    Bool allow_kgsl_fallback =
++        xwl_glamor_env_is_enabled("XWAYLAND_KGSL_SURFACELESS");
++
++    xwl_gbm->backend = XWL_GLAMOR_BACKEND_GBM;
++
++    if (xwl_glamor_env_is_enabled("XWAYLAND_FORCE_KGSL_SURFACELESS"))
++        return xwl_glamor_kgsl_surfaceless_init_egl(xwl_screen);
+ 
+     if (!xwl_gbm->drm && !xwl_glamor_gbm_init_main_dev(xwl_screen))
+-        return FALSE;
++        goto error;
+ 
+     if (!xwl_gbm->fd_render_node && !xwl_gbm->drm_authenticated) {
+         ErrorF("Failed to get wl_drm, disabling Glamor and DRI3\n");
+-	return FALSE;
++        goto error;
+     }
+ 
+     xwl_gbm->gbm = gbm_create_device(xwl_gbm->drm_fd);
+@@ -1776,24 +2231,8 @@ xwl_glamor_gbm_init_egl(struct xwl_screen *xwl_screen)
+         goto error;
+     }
+ 
+-    renderer = glGetString(GL_RENDERER);
+-    if (!renderer) {
+-        ErrorF("glGetString() returned NULL, your GL is broken\n");
+-        goto error;
+-    }
+-    if (strstr((const char *)renderer, "softpipe")) {
+-        ErrorF("Refusing to try glamor on softpipe\n");
+-        goto error;
+-    }
+-    if (!strncmp("llvmpipe", (const char *)renderer, strlen("llvmpipe"))) {
+-        ErrorF("Refusing to try glamor on llvmpipe\n");
+-        goto error;
+-    }
+-
+-    if (!epoxy_has_gl_extension("GL_OES_EGL_image")) {
+-        ErrorF("GL_OES_EGL_image not available\n");
++    if (!xwl_glamor_validate_renderer())
+         goto error;
+-    }
+ 
+     if (epoxy_has_egl_extension(xwl_screen->egl_display,
+                                 "EXT_image_dma_buf_import") &&
+@@ -1828,12 +2267,14 @@ xwl_glamor_gbm_init_egl(struct xwl_screen *xwl_screen)
+ #endif /* DRI3 */
+     return TRUE;
+ error:
+-    if (xwl_screen->egl_display != EGL_NO_DISPLAY) {
+-        xwl_glamor_maybe_destroy_context(xwl_screen);
+-        eglTerminate(xwl_screen->egl_display);
+-        xwl_screen->egl_display = EGL_NO_DISPLAY;
++    if (allow_kgsl_fallback) {
++        ErrorF("Xwayland glamor: GBM EGL setup failed, trying KGSL surfaceless\n");
++        xwl_glamor_gbm_reset_egl(xwl_screen);
++        if (xwl_glamor_kgsl_surfaceless_init_egl(xwl_screen))
++            return TRUE;
+     }
+ 
++    xwl_glamor_gbm_reset_egl(xwl_screen);
+     xwl_glamor_gbm_cleanup(xwl_screen);
+     return FALSE;
+ }
+@@ -1842,6 +2283,12 @@ Bool
+ xwl_glamor_gbm_init_screen(struct xwl_screen *xwl_screen)
+ {
+     struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
++
++    if (xwl_gbm->backend == XWL_GLAMOR_BACKEND_KGSL_SURFACELESS) {
++        ErrorF("Xwayland glamor: disabling DRI3 for KGSL surfaceless backend\n");
++        goto skip_drm_auth;
++    }
++
+ #ifdef DRI3
+     if (xwl_gbm->supports_syncobjs) {
+         xwl_dri3_info.version = 4;
+@@ -1902,6 +2349,9 @@ xwl_glamor_init_gbm(struct xwl_screen *xwl_screen)
+         return FALSE;
+     }
+ 
++    xwl_gbm->drm_fd = -1;
++    xwl_gbm->backend = XWL_GLAMOR_BACKEND_GBM;
++
+     dixSetPrivate(&xwl_screen->screen->devPrivates, &xwl_gbm_private_key,
+                   xwl_gbm);
+ 
