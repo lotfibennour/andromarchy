@@ -1,0 +1,12 @@
+# /etc/pacman.d/hooks/00-andromarchy-keep-llvm.hook: before llvm-libs changes, keep the LLVM our Mesa is built
+# against (native/andromarchy-keep-llvm.sh); andromarchy-protect links it back after the transaction.
+[Trigger]
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = llvm-libs
+
+[Action]
+Description = Keeping the LLVM our Mesa needs...
+When = PreTransaction
+Exec = /usr/local/bin/andromarchy-keep-llvm

@@ -102,7 +102,24 @@ def needed(path):
     return [l.split("[", 1)[1].rstrip("]") for l in out.splitlines() if "(NEEDED)" in l]
 
 
+def keep_llvm():
+    """After an llvm-libs upgrade: the LLVM our Mesa needs, kept by andromarchy-keep-llvm before it, linked back."""
+    marker = "/opt/lotfix/lib/.restore"
+    if not os.path.exists(marker):
+        return
+    src = open(marker).read().strip()
+    copy = "/opt/lotfix/lib/" + os.path.basename(src)
+    if src and not os.path.lexists(src) and os.path.exists(copy):
+        os.symlink(os.path.relpath(copy, os.path.dirname(src)), src)
+        print(f"andromarchy-protect: {os.path.basename(src)} kept for our Mesa (rebuild it against the new LLVM)")
+        subprocess.run(["notify-send", "Andromarchy: LLVM was upgraded",
+                        f"Mesa keeps using {os.path.basename(src)}; rebuild it against the new LLVM when convenient."],
+                       stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    os.unlink(marker)
+
+
 def check():
+    keep_llvm()
     if not os.path.exists(MANIFEST):
         return 0
     restored, problems = [], []

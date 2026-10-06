@@ -196,6 +196,8 @@ install -m 755 $L/native/android-clipboard.sh /usr/local/bin/android-clipboard
 install -m 755 $L/native/andromarchy-selftest.sh /usr/local/bin/andromarchy-selftest
 install -Dm 644 $L/native/zz-andromarchy-protect.hook /etc/pacman.d/hooks/zz-andromarchy-protect.hook
 install -Dm 644 $L/native/00-andromarchy-protect-save.hook /etc/pacman.d/hooks/00-andromarchy-protect-save.hook
+install -m 755 $L/native/andromarchy-keep-llvm.sh /usr/local/bin/andromarchy-keep-llvm
+install -Dm 644 $L/native/00-andromarchy-keep-llvm.hook /etc/pacman.d/hooks/00-andromarchy-keep-llvm.hook
 andromarchy-protect save
 
 rm -rf /tmp/mesa /tmp/fr /tmp/omarchy
