@@ -428,7 +428,8 @@ def main():
         # Directories bound under /run are Flatpak's per-app ones (XDG_RUNTIME_DIR...), holding relative links meant
         # for the container (wayland-1 -> ../../flatpak/wayland-1): mirror them so those links resolve in the tree.
         for o, v in ops:
-            if o in BINDS and v[-1].startswith("/run/"):
+            # never the ld.so cache dir: its "active" link is relative too, and the cache must land in the real folder
+            if o in BINDS and v[-1].startswith("/run/") and v[-1] != "/run/ld-so-cache-dir":
                 p = tree.here(v[-1])
                 # only those with relative links: a mirrored folder is the tree's own copy, and writes into it
                 # (Flatpak's ld.so cache dir) would no longer reach the bound folder
