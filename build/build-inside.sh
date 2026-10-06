@@ -131,9 +131,7 @@ install -m 755 $L/native/flatpak-fix-links.py /opt/lotfix/flatpak-fix-links.py
 # Flatpak runs bwrap from /usr/bin with an empty environment (no PATH): the stand-in there too, kept on updates.
 ln -sf /usr/local/bin/bwrap /usr/bin/bwrap
 grep -q "^NoExtract.*usr/bin/bwrap" /etc/pacman.conf ||
-  sed -i 's|^\[options\]|[options]
-# Andromarchy: bubblewrap cannot run on Android (no user namespaces); /usr/bin/bwrap is our stand-in
-NoExtract = usr/bin/bwrap|' /etc/pacman.conf
+  sed -i '/^\[options\]/a # Andromarchy: bubblewrap cannot run on Android (no user namespaces); /usr/bin/bwrap is our stand-in\nNoExtract = usr/bin/bwrap' /etc/pacman.conf
 install -m 755 $L/native/android-system-services.py /usr/local/bin/android-system-services
 install -m 755 $L/native/android-session-services.py /usr/local/bin/android-session-services
 # Linux -> Android requests (Wi-Fi panel, launching Android apps): the app watches run/android-request.
