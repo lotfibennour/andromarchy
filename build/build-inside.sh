@@ -51,14 +51,14 @@ tar -xf $L/lotfix-hyprland-aarch64.tar.zst -C /
 grep -q '^IgnorePkg.*hyprland' $C || sed -i "/^IgnorePkg/ s/$/ aquamarine hyprland/" $C
 
 # hyprgrass (touchscreen gestures), at the commit hyprgrass pins for our Hyprland (hyprpm.toml: v0.56.2).
-git clone -q https://github.com/horriblename/hyprgrass /tmp/hyprgrass && git -C /tmp/hyprgrass checkout -q 8e605468cbf429791d61ddbfaeb14ff5e08fec3e
+rm -rf /tmp/hyprgrass && git clone -q https://github.com/horriblename/hyprgrass /tmp/hyprgrass && git -C /tmp/hyprgrass checkout -q 8e605468cbf429791d61ddbfaeb14ff5e08fec3e
 (cd /tmp/hyprgrass && meson setup build -Dbuildtype=release && ninja -C build)
 install -Dm755 /tmp/hyprgrass/build/src/libhyprgrass.so /usr/lib/hyprland-plugins/libhyprgrass.so
 
 # Squeekboard on the overlay layer (above fullscreen windows) + current Rust's close() signature: our build in
 # /opt/lotfix (pacman never touches it), started by /usr/local/bin/squeekboard. Rust only for this build.
 pacman -S --noconfirm --needed rust glib2-devel
-git clone -q --depth 1 -b v1.43.1 https://gitlab.gnome.org/World/Phosh/squeekboard.git /tmp/squeekboard
+rm -rf /tmp/squeekboard && git clone -q --depth 1 -b v1.43.1 https://gitlab.gnome.org/World/Phosh/squeekboard.git /tmp/squeekboard
 git -C /tmp/squeekboard apply $L/patches/squeekboard/*.patch
 (cd /tmp/squeekboard && meson setup build --buildtype=release -Dtests=false && ninja -C build)
 install -Dm755 /tmp/squeekboard/build/src/squeekboard /opt/lotfix/squeekboard
@@ -67,7 +67,7 @@ pacman -Rns --noconfirm rust
 
 # Omarchy.
 rm -rf /tmp/omarchy
-git clone -q --depth 1 ${OMARCHY_REF:+-b "$OMARCHY_REF"} https://github.com/basecamp/omarchy /tmp/omarchy
+rm -rf /tmp/omarchy && git clone -q --depth 1 ${OMARCHY_REF:+-b "$OMARCHY_REF"} https://github.com/basecamp/omarchy /tmp/omarchy
 git -C /tmp/omarchy log -1 --format='omarchy %H %cd' > /etc/lotfix-omarchy-version
 bash $L/omarchy/install-omarchy-android.sh /tmp/omarchy
 # systemctl without systemd (user services, Restart=), ahead of systemd's own in /usr/local/bin.
@@ -160,7 +160,7 @@ localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8
 # only provide pacman's view of "mesa" (dependencies); their libraries are replaced by this build. A prebuilt Mesa
 # pinned an LLVM that Arch dropped (llvm-libs 23 removed libLLVM.so.22.1: the session did not start).
 pacman -S --noconfirm --needed llvm clang libclc spirv-llvm-translator glslang cbindgen python-mako python-yaml   python-packaging python-ply byacc bison flex libva wayland-protocols libxrandr libxshmfence libxxf86vm libglvnd
-git clone -q -b test/add-va-bridge https://github.com/lfdevs/mesa-for-android-container /tmp/mesa-src
+rm -rf /tmp/mesa-src && git clone -q -b test/add-va-bridge https://github.com/lfdevs/mesa-for-android-container /tmp/mesa-src
 git -C /tmp/mesa-src checkout -q ef25369b9c
 (cd /tmp/mesa-src && meson setup build --prefix=/usr --buildtype=release -Dplatforms=x11,wayland   -Dgallium-drivers=freedreno,zink,virgl,llvmpipe -Dgallium-va=enabled -Dgallium-rusticl=false -Dvulkan-drivers=freedreno   -Dfreedreno-kmds=kgsl -Dvulkan-layers= -Dgles1=disabled -Dgles2=enabled -Dglx=dri -Degl=enabled -Dvalgrind=disabled   -Dlibunwind=disabled -Dtools= -Dvideo-codecs=all && ninja -C build && ninja -C build install)
 mkdir -p /opt/lotfix/protect && cp /tmp/mesa-src/build/meson-logs/install-log.txt /opt/lotfix/protect/mesa.list
@@ -170,7 +170,7 @@ rm -rf /tmp/mesa-src
 # (lfdevs/xwayland, test/support-xwayland-surfaceless) on the official 24.1.13. In /usr/local/bin, first in PATH:
 # Arch's xorg-xwayland stays as installed (pacman never touches ours).
 pacman -S --noconfirm --needed xtrans xorgproto libxkbfile xorg-font-util libxfont2 libxcvt libdecor libtirpc libei
-git clone -q --depth 1 -b xwayland-24.1.13 https://gitlab.freedesktop.org/xorg/xserver.git /tmp/xwayland
+rm -rf /tmp/xwayland && git clone -q --depth 1 -b xwayland-24.1.13 https://gitlab.freedesktop.org/xorg/xserver.git /tmp/xwayland
 for p in $L/patches/xwayland/*.patch; do git -C /tmp/xwayland apply "$p"; done
 (cd /tmp/xwayland && meson setup build --prefix=/usr --buildtype=release -Dxvfb=false -Dxdmcp=false -Dglamor=true   -Dxkb_dir=/usr/share/X11/xkb -Dxkb_output_dir=/var/lib/xkb && ninja -C build)
 install -m 755 /tmp/xwayland/build/hw/xwayland/Xwayland /usr/local/bin/Xwayland
