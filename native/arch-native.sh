@@ -33,7 +33,7 @@ for d in $(cat "$R"/etc/ld.so.conf.d/*.conf 2>/dev/null | grep -E '^/'); do
 done
 export LD_LIBRARY_PATH=${ARCH_LIBPATH_EXTRA:+$ARCH_LIBPATH_EXTRA:}$G:$LIBDIRS
 LOADER="$G/ld-linux-aarch64.so.1 --library-path $LD_LIBRARY_PATH" # same libs for the first process and its children
-export PATH=/root/.local/bin:/usr/local/bin:/usr/bin HOME=/root USER=root LOGNAME=root
+export PATH=/root/.local/bin:/usr/local/bin:/usr/bin HOME=/root USER=android LOGNAME=android
 # Termux's own values would leak in (terminals spawn $SHELL = Termux's bash, a Bionic binary).
 export SHELL=/usr/bin/bash TMPDIR=/tmp
 unset PREFIX ANDROID_ROOT_TERMUX

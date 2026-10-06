@@ -166,8 +166,10 @@ int main(int argc, char **argv)
 
     setenv("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin", 1);
     setenv("HOME", "/root", 1);
-    setenv("USER", "root", 1); // scripts expect it (set -u installers); same user as HOME
-    setenv("LOGNAME", "root", 1);
+    // The app's account (first-boot.sh: "android", home /root); scripts expect USER (set -u installers). Not
+    // "root": apps warn about running as root (Zotero) or change their behaviour. sudo sets USER=root itself.
+    setenv("USER", "android", 1);
+    setenv("LOGNAME", "android", 1);
     setenv("SHELL", "/usr/bin/bash", 1); // Termux's own would leak in (terminals spawn $SHELL)
     setenv("TMPDIR", "/tmp", 1);
     unsetenv("PREFIX");

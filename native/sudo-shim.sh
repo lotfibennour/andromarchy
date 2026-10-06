@@ -12,6 +12,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ $# -eq 0 ] && exit 0               # "sudo -v" and friends
+# like sudo: the command runs as root, and knows who asked (the session's USER is the real account, "android")
+[ "${USER:-}" != root ] && export SUDO_USER=${USER:-android}
+export USER=root LOGNAME=root
 [ -n "${FAKEROOTKEY:-}" ] && exec "$@" # already fake root
 
 B=$FAKECHROOT_BASE
