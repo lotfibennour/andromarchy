@@ -5,7 +5,8 @@
 # is built against the repo's LLVM, which a partial update may move ahead of it. An update, an app install pulling a dependency, or a full
 # -Syu could overwrite or remove them: the session would not start (black screen).
 #
-#   save    record the current version of every protected file (copy in /opt/lotfix/protect/store)
+#   save    record the current version of every protected file (copy in /opt/lotfix/protect/store); run before
+#           every pacman transaction (hook), so a component we rebuild ourselves is kept, never reverted
 #   check   (pacman PostTransaction hook) put back any protected file that was replaced or removed, then verify
 #           that every library our builds load can be found; report problems
 #
@@ -64,21 +65,23 @@ def protected_paths():
     return paths
 
 
-def save():
+def save(quiet=False):
     os.makedirs(STORE, exist_ok=True)
+    old = dict(l.rstrip("\n").split("\t") for l in open(MANIFEST)) if os.path.exists(MANIFEST) else {}
     lines = []
     for p in protected_paths():
         e = entry(p)
         if e is None:
             continue
-        if not e.startswith("link:"):
+        if not e.startswith("link:") and (old.get(p) != e or not os.path.exists(STORE + p)):  # only what changed
             dst = STORE + p
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(p, dst)
         lines.append(f"{p}\t{e}\n")
     with open(MANIFEST, "w") as f:
         f.writelines(lines)
-    print(f"andromarchy-protect: {len(lines)} files recorded")
+    if not quiet:
+        print(f"andromarchy-protect: {len(lines)} files recorded")
 
 
 def restore(path, want):
@@ -128,7 +131,7 @@ def check():
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "check"
     if cmd == "save":
-        save()
+        save(quiet=len(sys.argv) > 2 and sys.argv[2] == "-q")
     elif cmd == "check":
         sys.exit(check())
     else:
