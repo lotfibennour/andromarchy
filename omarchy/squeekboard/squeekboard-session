@@ -1,7 +1,21 @@
 #!/bin/sh
 # /usr/local/bin/squeekboard-session (Hyprland autostart): Squeekboard enabled, its layouts (fr, us, ara) and the
 # Omarchy theme colours, then the keyboard itself.
-gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled true
+# A physical keyboard (the app writes 1/0 to $XDG_RUNTIME_DIR/hardware-keyboard) turns the automatic display off:
+# Squeekboard hides and stops popping up in text fields; the bar icon still shows it on demand.
 gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'fr'), ('xkb', 'us'), ('xkb', 'ara')]"
 squeekboard-theme
+follow_hardware_keyboard() {
+  f=$XDG_RUNTIME_DIR/hardware-keyboard
+  while :; do
+    if [ "$(cat "$f" 2>/dev/null)" = 1 ]; then
+      gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled false
+      busctl --user call sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 SetVisible b false 2>/dev/null
+    else
+      gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled true
+    fi
+    inotifywait -qq -e close_write,moved_to,create "$XDG_RUNTIME_DIR" --include '/hardware-keyboard$' || sleep 5
+  done
+}
+follow_hardware_keyboard &
 exec squeekboard

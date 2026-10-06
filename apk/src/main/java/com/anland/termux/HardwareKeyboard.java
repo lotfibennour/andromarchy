@@ -13,7 +13,7 @@ import java.io.IOException;
 /**
  * Tells the Linux side whether a physical keyboard (USB or Bluetooth) is connected, like Android hides its soft
  * keyboard then. The Linux side cannot see input devices (no /dev/input for apps), so the app writes "1" or "0" to
- * run/hardware-keyboard; osk-autoshow (Omarchy's on-screen keyboard) reads it before showing itself.
+ * run/hardware-keyboard; squeekboard-session turns Squeekboard's automatic display off while it is 1.
  */
 final class HardwareKeyboard implements InputManager.InputDeviceListener {
     private final Context ctx;
