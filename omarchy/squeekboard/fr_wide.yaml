@@ -1,0 +1,62 @@
+---
+# Andromarchy: PC-style AZERTY for Squeekboard (Esc, Tab, Ctrl, Super, Alt, AltGr, arrows).
+outlines:
+    default: { width: 48, height: 32 }
+    wide:    { width: 72, height: 32 }
+    space:   { width: 260, height: 32 }
+
+views:
+    base:
+        - 'Esc & é quot '' ( - è _ ç à ) = BackSpace'
+        - 'Tab a z e r t y u i o p ^ $ Return'
+        - 'Caps q s d f g h j k l m ù *'
+        - 'Shift < w x c v b n , ; : ! Up'
+        - 'Ctrl Super Alt space AltGr Left Down Right'
+    upper:
+        - 'Esc 1 2 3 4 5 6 7 8 9 0 ° + BackSpace'
+        - 'Tab A Z E R T Y U I O P ¨ £ Return'
+        - 'Caps Q S D F G H J K L M % µ'
+        - 'Shift > W X C V B N ? . / § Up'
+        - 'Ctrl Super Alt space AltGr Left Down Right'
+    altgr:
+        - 'Esc ~ # { [ | ` \ @ ] } € BackSpace'
+        - 'Tab F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12'
+        - 'Caps â ê î ô û ë ï ü œ æ « »'
+        - 'Shift Home End PgUp PgDn Del Ins … – ± Up'
+        - 'Ctrl Super Alt space AltGr Left Down Right'
+
+buttons:
+    quot:      { text: '"' }
+    Esc:       { keysym: "Escape", label: "Esc" }
+    Tab:       { keysym: "Tab", label: "Tab", outline: wide }
+    BackSpace: { action: erase, icon: "edit-clear-symbolic", outline: wide }
+    Return:    { keysym: "Return", icon: "key-enter", outline: wide }
+    Caps:      { action: { locking: { lock_view: "upper", unlock_view: "base", looks_locked_from: [] } }, label: "Caps", outline: wide }
+    Shift:     { action: { locking: { lock_view: "upper", unlock_view: "base" } }, icon: "key-shift", outline: wide }
+    AltGr:     { action: { locking: { lock_view: "altgr", unlock_view: "base" } }, label: "AltGr", outline: wide }
+    Ctrl:      { modifier: "Control", label: "Ctrl", outline: wide }
+    Super:     { modifier: "Mod4", label: "Super", outline: wide }
+    Alt:       { modifier: "Alt", label: "Alt", outline: wide }
+    space:     { keysym: "space", label: " ", outline: space }
+    Up:        { keysym: "Up", label: "↑" }
+    Down:      { keysym: "Down", label: "↓" }
+    Left:      { keysym: "Left", label: "←" }
+    Right:     { keysym: "Right", label: "→" }
+    Home:      { keysym: "Home", label: "Home" }
+    End:       { keysym: "End", label: "End" }
+    PgUp:      { keysym: "Page_Up", label: "PgUp" }
+    PgDn:      { keysym: "Page_Down", label: "PgDn" }
+    Del:       { keysym: "Delete", label: "Del" }
+    Ins:       { keysym: "Insert", label: "Ins" }
+    F1:        { keysym: "F1" }
+    F2:        { keysym: "F2" }
+    F3:        { keysym: "F3" }
+    F4:        { keysym: "F4" }
+    F5:        { keysym: "F5" }
+    F6:        { keysym: "F6" }
+    F7:        { keysym: "F7" }
+    F8:        { keysym: "F8" }
+    F9:        { keysym: "F9" }
+    F10:       { keysym: "F10" }
+    F11:       { keysym: "F11" }
+    F12:       { keysym: "F12" }

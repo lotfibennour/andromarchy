@@ -1,0 +1,18 @@
+diff --git i/src/backend/Anland.cpp w/src/backend/Anland.cpp
+index d742070..30a6c97 100644
+--- i/src/backend/Anland.cpp
++++ w/src/backend/Anland.cpp
+@@ -119,6 +119,13 @@ Aquamarine::CAnlandOutput::CAnlandOutput(const std::string& name_, CWeakPointer<
+     description = "Anland Android display";
+     make        = "anland";
+     model       = "anland";
++    // ANLAND_PHYSICAL_MM="WxH": the display's size from Android's metrics (SessionService). Without it the output
++    // reports 0x0 mm and clients that size themselves physically (squeekboard: half the screen) guess.
++    if (const char* mm = getenv("ANLAND_PHYSICAL_MM")) {
++        int w = 0, h = 0;
++        if (sscanf(mm, "%dx%d", &w, &h) == 2 && w > 0 && h > 0)
++            physicalSize = {(double)w, (double)h};
++    }
+ }
+ 
+ Aquamarine::CAnlandOutput::~CAnlandOutput() {

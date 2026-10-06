@@ -207,6 +207,12 @@ public class SessionService extends Service {
         env.put("ANDROMARCHY_UID", String.valueOf(android.os.Process.myUid()));
         env.put("ANDROMARCHY_GID", String.valueOf(android.os.Process.myUid()));
         env.put("ANLAND_SOCKET", sock.getPath());
+        // The display's physical size (landscape, mm) for the compositor's output: clients size themselves from it
+        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+        ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).getDefaultDisplay().getRealMetrics(dm);
+        int wmm = Math.round(Math.max(dm.widthPixels / dm.xdpi, dm.heightPixels / dm.ydpi) * 25.4f);
+        int hmm = Math.round(Math.min(dm.widthPixels / dm.xdpi, dm.heightPixels / dm.ydpi) * 25.4f);
+        env.put("ANLAND_PHYSICAL_MM", wmm + "x" + hmm);
         // Flatpak apps' launchers (exported .desktop files, icons): a normal login gets these from
         // /etc/profile.d/flatpak.sh or systemd's environment generator; this session starts from the app.
         env.put("XDG_DATA_DIRS", "/root/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share"
