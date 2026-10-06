@@ -15,6 +15,12 @@ grep -q '^IgnorePkg.*mesa' $C ||
 sed -i 's/^CheckSpace/#CheckSpace/' $C
 
 rm -f /var/lib/pacman/db.lck # left behind if a previous run was interrupted
+# gpg's dotlock (a hard link whose link count it checks) never sees its own lock as taken under our runtime: it
+# looped on "removing stale lockfile" forever. Only pacman uses this keyring, one process at a time: no locks.
+# (pacman-key adds its own options to an existing gpg.conf.)
+mkdir -p /etc/pacman.d/gnupg && grep -qx lock-never /etc/pacman.d/gnupg/gpg.conf 2>/dev/null ||
+  echo lock-never >> /etc/pacman.d/gnupg/gpg.conf
+rm -f /etc/pacman.d/gnupg/*.lock
 pacman-key --init
 pacman-key --populate archlinuxarm
 # Android runs its own kernel: drop the kernel, firmware and initramfs tooling (over 1 GB).
