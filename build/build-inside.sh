@@ -164,6 +164,7 @@ if [ ! -L /usr/lib/libLLVM.so.22.1 ]; then
   mv /usr/lib/libLLVM.so.22.1 /opt/lotfix/lib/ && ln -s ../../opt/lotfix/lib/libLLVM.so.22.1 /usr/lib/libLLVM.so.22.1
 fi
 install -m 755 $L/native/andromarchy-protect.py /usr/local/bin/andromarchy-protect
+install -m 755 $L/native/android-clipboard.sh /usr/local/bin/android-clipboard
 install -Dm 644 $L/native/zz-andromarchy-protect.hook /etc/pacman.d/hooks/zz-andromarchy-protect.hook
 andromarchy-protect save
 

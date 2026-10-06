@@ -160,6 +160,12 @@ grep -q 'require("hypr.touch")' ~/.config/hypr/hyprland.lua ||
   sed -i 's/^require("hypr.autostart")$/require("hypr.autostart")\nrequire("hypr.touch")/' ~/.config/hypr/hyprland.lua
 grep -q 'libhyprgrass' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: touchscreen gestures\no.exec_on_start("hyprctl plugin load /usr/lib/hyprland-plugins/libhyprgrass.so && hyprctl reload")\n' >> ~/.config/hypr/autostart.lua
+# Shared clipboard with Android (native/android-clipboard.sh, our aquamarine bridges the Anland socket).
+grep -q 'android-clipboard' ~/.config/hypr/autostart.lua ||
+  printf '
+-- Android/Andromarchy: shared clipboard with Android
+o.exec_on_start("android-clipboard")
+' >> ~/.config/hypr/autostart.lua
 # Omarchy's first-run steps that need the session (dark GTK theme, primary paste, welcome notification), once.
 grep -q 'first-session.sh' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: first session (once)\no.exec_on_start("/opt/lotfix/first-session.sh")\n' >> ~/.config/hypr/autostart.lua

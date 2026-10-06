@@ -1,0 +1,110 @@
+diff --git i/include/aquamarine/backend/Anland.hpp w/include/aquamarine/backend/Anland.hpp
+index 19b7b13..81b54ce 100644
+--- i/include/aquamarine/backend/Anland.hpp
++++ w/include/aquamarine/backend/Anland.hpp
+@@ -126,6 +126,7 @@ namespace Aquamarine {
+         bool                                                    importBuffers();
+         void                                                    armReconnect(int ms);
+         void                                                    onReconnectTimer();
++        void                                                    onClipboardFile();
+         static void                                             onFallback(void* data);
+         void                                                    onInputReadable();
+         void                                                    processInput(const ::InputEvent& ev);
+@@ -136,6 +137,9 @@ namespace Aquamarine {
+         std::string                                             socketPath;
+         bool                                                    hideTransportFDs = false;
+         Hyprutils::OS::CFileDescriptor                          reconnectTimer;
++        // Clipboard with Android: files in XDG_RUNTIME_DIR, bridged to wl-copy / wl-paste by android-clipboard
++        Hyprutils::OS::CFileDescriptor                          clipWatch;
++        std::string                                             clipDir, lastClip;
+         SSwapchainOptions                                       lastSwapchainOptions; // to rebuild the swapchain after a reconnect
+         std::vector<Hyprutils::Memory::CSharedPointer<IBuffer>> buffers;
+         Hyprutils::Memory::CSharedPointer<CAnlandAllocator>     allocator;
+diff --git i/src/backend/Anland.cpp w/src/backend/Anland.cpp
+index 30a6c97..7640a73 100644
+--- i/src/backend/Anland.cpp
++++ w/src/backend/Anland.cpp
+@@ -6,6 +6,9 @@
+ #include <vector>
+ #include <sys/eventfd.h>
+ #include <sys/timerfd.h>
++#include <sys/inotify.h>
++#include <fstream>
++#include <sstream>
+ #include <sys/socket.h>
+ #include <unistd.h>
+ #include <drm_fourcc.h>
+@@ -261,6 +264,12 @@ bool Aquamarine::CAnlandBackend::start() {
+         refreshmHz = refresh;
+ 
+     reconnectTimer = Hyprutils::OS::CFileDescriptor{timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC)};
++    if (const char* run = getenv("XDG_RUNTIME_DIR")) {
++        clipDir   = run;
++        clipWatch = Hyprutils::OS::CFileDescriptor{inotify_init1(IN_NONBLOCK | IN_CLOEXEC)};
++        if (clipWatch.isValid())
++            inotify_add_watch(clipWatch.get(), run, IN_MOVED_TO | IN_CLOSE_WRITE);
++    }
+     set_fallback_callback(display, &CAnlandBackend::onFallback, this);
+ 
+     // ponytail: the first connection blocks startup until the Android app is in front (30 s): we need the buffer size for the output mode.
+@@ -329,6 +338,8 @@ std::vector<SP<SPollFD>> Aquamarine::CAnlandBackend::pollFDs() {
+         return {};
+     // The reconnect timer is always polled; the transport fds only exist while a consumer is connected.
+     std::vector<SP<SPollFD>> fds = {makeShared<SPollFD>(reconnectTimer.get(), [this]() { onReconnectTimer(); })};
++    if (clipWatch.isValid())
++        fds.emplace_back(makeShared<SPollFD>(clipWatch.get(), [this]() { onClipboardFile(); }));
+     if (!is_fallback(display) && !hideTransportFDs) {
+         fds.emplace_back(makeShared<SPollFD>(get_buffer_ready_fd(display), [this]() { onBufferReady(); }));
+         fds.emplace_back(makeShared<SPollFD>(get_data_fd(display), [this]() { onInputReadable(); }));
+@@ -443,13 +454,19 @@ void Aquamarine::CAnlandBackend::processInput(const InputEvent& ev) {
+             break;
+         case INPUT_TYPE_CLIPBOARD:
+         case INPUT_TYPE_TEXT_INPUT: {
+-            // The payload must always be read, or the stream desyncs. ponytail: clipboard not wired yet.
++            // The payload must always be read, or the stream desyncs.
+             const uint32_t len = ev.type == INPUT_TYPE_CLIPBOARD ? ev.clipboard.size : ev.text_input.size;
+             if (len > 0 && len < (16u << 20)) {
+                 std::vector<char> text(len);
+                 poll_input_event_extend_data(display, text.data(), len, 5000);
+                 if (ev.type == INPUT_TYPE_TEXT_INPUT && keyboard)
+                     typeText(text.data(), len, t);
++                if (ev.type == INPUT_TYPE_CLIPBOARD && !clipDir.empty()) { // Android copied: android-clipboard runs wl-copy
++                    lastClip = std::string(text.data(), len);
++                    const std::string tmp = clipDir + "/clipboard-from-android.tmp";
++                    std::ofstream(tmp, std::ios::binary).write(text.data(), len);
++                    rename(tmp.c_str(), (clipDir + "/clipboard-from-android").c_str());
++                }
+             }
+             break;
+         }
+@@ -648,3 +665,30 @@ int Aquamarine::CAnlandBackend::selectedIndex() const {
+ SP<IBuffer> Aquamarine::CAnlandBackend::bufferAt(int index) {
+     return buffers.at(index % buffers.size());
+ }
++
++// The desktop copied (android-clipboard writes wl-paste's text to clipboard-to-android): set Android's clipboard.
++void Aquamarine::CAnlandBackend::onClipboardFile() {
++    alignas(inotify_event) char buf[4096];
++    bool                        changed = false;
++    ssize_t                     n;
++    while ((n = read(clipWatch.get(), buf, sizeof buf)) > 0)
++        for (char* p = buf; p < buf + n;) {
++            auto* e = (inotify_event*)p;
++            if (e->len && strcmp(e->name, "clipboard-to-android") == 0)
++                changed = true;
++            p += sizeof(inotify_event) + e->len;
++        }
++    if (!changed || !display || is_fallback(display))
++        return;
++    std::ifstream     f(clipDir + "/clipboard-to-android", std::ios::binary);
++    std::stringstream ss;
++    ss << f.rdbuf();
++    std::string text = ss.str();
++    if (text.empty() || text == lastClip || text.size() >= (16u << 20))
++        return; // ours coming back (Android -> wl-copy -> wl-paste --watch), or nothing
++    lastClip = text;
++    struct OutputEvent ev = {};
++    ev.type           = OUTPUT_TYPE_CLIPBOARD;
++    ev.clipboard.size = text.size();
++    push_output_event_with_length(display, &ev, text.data(), text.size());
++}
