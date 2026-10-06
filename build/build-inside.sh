@@ -163,8 +163,15 @@ localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8
 pacman -S --noconfirm --needed llvm clang libclc spirv-llvm-translator glslang cbindgen python-mako python-yaml   python-packaging python-ply byacc bison flex libva wayland-protocols libxrandr libxshmfence libxxf86vm libglvnd
 rm -rf /tmp/mesa-src && git clone -q -b test/add-va-bridge https://github.com/lfdevs/mesa-for-android-container /tmp/mesa-src
 git -C /tmp/mesa-src checkout -q ef25369b9c
-(cd /tmp/mesa-src && meson setup build --prefix=/usr --buildtype=release -Dplatforms=x11,wayland   -Dgallium-drivers=freedreno,zink,virgl,llvmpipe -Dgallium-va=enabled -Dgallium-rusticl=false -Dvulkan-drivers=freedreno   -Dfreedreno-kmds=kgsl -Dvulkan-layers= -Dgles1=disabled -Dgles2=enabled -Dglx=dri -Degl=enabled -Dvalgrind=disabled   -Dlibunwind=disabled -Dtools= -Dvideo-codecs=all && ninja -C build && ninja -C build install)
-mkdir -p /opt/lotfix/protect && cp /tmp/mesa-src/build/meson-logs/install-log.txt /opt/lotfix/protect/mesa.list
+# The validated build's options, every one that differs from Mesa's defaults (termux-va: hardware video).
+(cd /tmp/mesa-src && meson setup build --prefix=/usr --buildtype=release -Dplatforms=x11,wayland \
+  -Dgallium-drivers=freedreno,zink,virgl,llvmpipe -Dvulkan-drivers=freedreno -Dfreedreno-kmds=kgsl \
+  -Dgallium-va=enabled -Dtermux-va-bridge=enabled -Dtermux-va-wayland-shim=enabled -Dvideo-codecs=all \
+  -Degl=enabled -Dglvnd=enabled -Dglx=dri -Dgles1=disabled -Dgles2=enabled -Dgallium-mediafoundation=disabled \
+  -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dvalgrind=disabled -Dlibunwind=disabled && ninja -C build)
+# Protected: every file the install writes, links made by its scripts too (the DRI driver names): newer than this.
+touch /tmp/mesa-install.stamp && sleep 1 && ninja -C /tmp/mesa-src/build install
+mkdir -p /opt/lotfix/protect && find /usr -newer /tmp/mesa-install.stamp \( -type f -o -type l \) > /opt/lotfix/protect/mesa.list
 rm -rf /tmp/mesa-src
 
 # XWayland with GPU acceleration without /dev/dri (glamor + DRI3 on KGSL surfaceless): lfdevs's patches
