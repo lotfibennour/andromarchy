@@ -184,6 +184,10 @@ for p in $L/patches/xwayland/*.patch; do git -C /tmp/xwayland apply "$p"; done
 install -m 755 /tmp/xwayland/build/hw/xwayland/Xwayland /usr/local/bin/Xwayland
 rm -rf /tmp/xwayland
 
+# Build-only tools out of the image (~250 MB): Mesa's compilers, cargo's cache. llvm-libs (Mesa's runtime) stays.
+pacman -Rns --noconfirm clang llvm libclc spirv-llvm-translator cbindgen 2>/dev/null || true
+rm -rf /root/.cargo /tmp/mesa-install.stamp
+
 # Protection of our own builds across pacman transactions (native/andromarchy-protect.py): a record of every
 # protected file; the hook puts them back after any install/upgrade/removal.
 install -m 755 $L/native/andromarchy-protect.py /usr/local/bin/andromarchy-protect
