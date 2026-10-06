@@ -5,3 +5,4 @@
 *.h text eol=lf
 *.conf text eol=lf
 *.patch -text
+*.lua text eol=lf
