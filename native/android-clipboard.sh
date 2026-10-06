@@ -5,6 +5,6 @@
 d=${XDG_RUNTIME_DIR:?}
 pkill -f 'wl-paste --type text --watch' 2>/dev/null
 wl-paste --type text --watch sh -c 'cat > "$0/clipboard-to-android.tmp" && mv -f "$0/clipboard-to-android.tmp" "$0/clipboard-to-android"' "$d" &
-while inotifywait -qq -e moved_to --include '^clipboard-from-android$' "$d"; do
+while inotifywait -qq -e moved_to --include '/clipboard-from-android$' "$d"; do
   wl-copy --type text/plain < "$d/clipboard-from-android"
 done
