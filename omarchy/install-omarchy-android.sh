@@ -155,7 +155,17 @@ grep -q 'kb_layout = "us,fr,ara"' ~/.config/hypr/input.lua ||
 # built into /usr/local/bin by build-inside.sh). Started with Hyprland.
 grep -q 'osk-autoshow' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: on-screen keyboard follows text-field focus\no.exec_on_start("osk-autoshow")\n' >> ~/.config/hypr/autostart.lua
-# Android-style edit menu on a long touch press (native/longpress-menu.sh, installed by build-inside.sh).
+# Touchscreen gestures (hyprgrass, built by build-inside.sh): 3 fingers. HyperOS's own 3-finger gestures must be off
+# (docs/device-setup.md).
+install -Dm644 "$(dirname "$0")/touch.lua" ~/.config/hypr/touch.lua
+grep -q 'require("hypr.touch")' ~/.config/hypr/hyprland.lua ||
+  sed -i 's/^require("hypr.autostart")$/require("hypr.autostart")
+require("hypr.touch")/' ~/.config/hypr/hyprland.lua
+grep -q 'libhyprgrass' ~/.config/hypr/autostart.lua ||
+  printf '
+-- Android/Andromarchy: touchscreen gestures
+o.exec_on_start("hyprctl plugin load /usr/lib/hyprland-plugins/libhyprgrass.so && hyprctl reload")
+' >> ~/.config/hypr/autostart.lua
 # Omarchy's first-run steps that need the session (dark GTK theme, primary paste, welcome notification), once.
 grep -q 'first-session.sh' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: first session (once)\no.exec_on_start("/opt/lotfix/first-session.sh")\n' >> ~/.config/hypr/autostart.lua

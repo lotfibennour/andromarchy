@@ -37,7 +37,7 @@ pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
   base-devel git cmake ninja pkgconf python autoconf automake libtool po4a \
   hyprland hyprwayland-scanner wayland-protocols glaze cli11 hwdata libdisplay-info libinput seatd pixman \
   fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl gnome-keyring libsecret flatpak gnome-software nautilus \
-  mesa-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc
+  mesa-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc glm meson
 
 
 # fakeroot over TCP: Android has no SysV IPC.
@@ -48,6 +48,11 @@ mkdir -p /tmp/fr && tar -xzf $L/fakeroot.tar.gz -C /tmp/fr --strip-components=1
 tar -xf $L/lotfix-hyprland-aarch64.tar.zst -C /
 # Only now: ignored earlier, pacman could not resolve them as hyprland dependencies.
 grep -q '^IgnorePkg.*hyprland' $C || sed -i "/^IgnorePkg/ s/$/ aquamarine hyprland/" $C
+
+# hyprgrass (touchscreen gestures), at the commit hyprgrass pins for our Hyprland (hyprpm.toml: v0.56.2).
+git clone -q https://github.com/horriblename/hyprgrass /tmp/hyprgrass && git -C /tmp/hyprgrass checkout -q 8e605468cbf429791d61ddbfaeb14ff5e08fec3e
+(cd /tmp/hyprgrass && meson setup build -Dbuildtype=release && ninja -C build)
+install -Dm755 /tmp/hyprgrass/build/src/libhyprgrass.so /usr/lib/hyprland-plugins/libhyprgrass.so
 
 
 # Omarchy.
