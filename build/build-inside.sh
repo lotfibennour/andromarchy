@@ -60,6 +60,7 @@ install -Dm755 /tmp/hyprgrass/build/src/libhyprgrass.so /usr/lib/hyprland-plugin
 # Squeekboard on the overlay layer (above fullscreen windows) + current Rust's close() signature: our build in
 # /opt/lotfix (pacman never touches it), started by /usr/local/bin/squeekboard. Rust only for this build.
 pacman -S --noconfirm --needed rust glib2-devel
+rm -rf /root/.cargo/registry/src # sources left half-unpacked by an interrupted run
 rm -rf /tmp/squeekboard && git clone -q --depth 1 -b v1.43.1 https://gitlab.gnome.org/World/Phosh/squeekboard.git /tmp/squeekboard
 git -C /tmp/squeekboard apply $L/patches/squeekboard/*.patch
 (cd /tmp/squeekboard && meson setup build --buildtype=release -Dtests=false && ninja -C build)
