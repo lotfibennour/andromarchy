@@ -131,7 +131,7 @@ o.bind("XF86Keyboard", "Next on-screen keyboard language", hl.dsp.exec_cmd("sque
 grep -q 'squeekboard-session' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: Squeekboard (shows by itself in text fields; bar icon toggles it)\no.exec_on_start("squeekboard-session")\n' >> ~/.config/hypr/autostart.lua
 # Touchscreen gestures (hyprgrass, built by build-inside.sh): 3 fingers. HyperOS's own 3-finger gestures must be off
-# (docs/device-setup.md).
+# (docs/user-guide.md).
 install -Dm644 "$(dirname "$0")/touch.lua" ~/.config/hypr/touch.lua
 # Window rules for the Android screen (modal dialogs kept below Omarchy's bar).
 install -Dm644 "$(dirname "$0")/andromarchy.lua" ~/.config/hypr/andromarchy.lua
