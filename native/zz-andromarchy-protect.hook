@@ -1,0 +1,13 @@
+# /etc/pacman.d/hooks/zz-andromarchy-protect.hook: after every transaction (last, "zz"), put back Andromarchy's
+# own builds if a package replaced them, and check that their libraries are still there.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Keeping Andromarchy's own builds in place...
+When = PostTransaction
+Exec = /usr/local/bin/andromarchy-protect check

@@ -155,5 +155,17 @@ gcc -O2 -shared -fPIC -o /opt/lotfix/android-compat.so $L/native/android-compat.
 # glibc reads locales internally from LOCPATH, which ignores locale-archive: one directory per locale.
 localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8
 
+# Protection of our own builds across pacman transactions (native/andromarchy-protect.py): our Mesa's LLVM as a
+# private copy (Arch moves on: llvm-libs 23 removed libLLVM.so.22.1 and the session did not start), then a record
+# of every protected file; the hook puts them back after any install/upgrade/removal.
+mkdir -p /opt/lotfix/lib
+if [ ! -L /usr/lib/libLLVM.so.22.1 ]; then
+  [ -f /usr/lib/libLLVM.so.22.1 ] || { echo "our Mesa needs libLLVM.so.22.1 (llvm-libs 22), not in the repo anymore"; exit 1; }
+  mv /usr/lib/libLLVM.so.22.1 /opt/lotfix/lib/ && ln -s ../../opt/lotfix/lib/libLLVM.so.22.1 /usr/lib/libLLVM.so.22.1
+fi
+install -m 755 $L/native/andromarchy-protect.py /usr/local/bin/andromarchy-protect
+install -Dm 644 $L/native/zz-andromarchy-protect.hook /etc/pacman.d/hooks/zz-andromarchy-protect.hook
+andromarchy-protect save
+
 rm -rf /tmp/mesa /tmp/fr /tmp/omarchy
 echo "lotfix rootfs built"

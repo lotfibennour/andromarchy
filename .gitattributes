@@ -7,3 +7,4 @@
 *.patch -text
 *.lua text eol=lf
 *.yaml text eol=lf
+*.hook text eol=lf
