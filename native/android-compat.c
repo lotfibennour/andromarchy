@@ -1261,6 +1261,13 @@ int execve(const char *path, char *const argv[], char *const envp[])
             putenv(runtime_env[i]);
     }
     env[n] = NULL;
+    // Inside our Flatpak sandboxes, flatpak-spawn (a nested sandbox, refused by the portal here) is our stand-in,
+    // whatever PATH found (glycin runs it after "env -i"): see native/flatpak-spawn.sh.
+    const char *base = getenv("FAKECHROOT_BASE");
+    const char *slash = path ? strrchr(path, '/') : NULL;
+    if (base && strstr(base, "/bwrap-flatpak/") && strcmp(slash ? slash + 1 : path, "flatpak-spawn") == 0 &&
+        access("/run/host/andromarchy-bin/flatpak-spawn", X_OK) == 0)
+        path = "/run/host/andromarchy-bin/flatpak-spawn";
     return next(self_exe_target(path), argv, env);
 }
 

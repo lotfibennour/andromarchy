@@ -127,6 +127,7 @@ install -m 755 $L/native/android-nm.py /usr/local/bin/android-nm
 # The other services a desktop expects on D-Bus (tools/dbus-probe.sh): system and session stand-ins.
 install -m 755 $L/native/bwrap-shim.sh -D /usr/local/libexec/bwrap-legacy
 install -m 755 $L/native/bwrap-flatpak.py /usr/local/bin/bwrap  # Flatpak apps (trees + runtime glibc); others: legacy
+install -Dm 755 $L/native/flatpak-spawn.sh /usr/local/libexec/andromarchy-flatpak/flatpak-spawn # nested sandboxes, run directly
 install -m 755 $L/native/flatpak-fix-links.py /opt/lotfix/flatpak-fix-links.py
 # Flatpak runs bwrap from /usr/bin with an empty environment (no PATH): the stand-in there too, kept on updates.
 ln -sf /usr/local/bin/bwrap /usr/bin/bwrap

@@ -234,6 +234,7 @@ def runtime_glibc(tree):
 
 
 HOST_GL = "/opt/lotfix/host-gl"
+SPAWN_DIR = "/usr/local/libexec/andromarchy-flatpak"  # flatpak-spawn for inside the sandboxes (native/flatpak-spawn.sh)
 
 
 def host_gl():
@@ -369,6 +370,10 @@ def main():
                                  f"{os.readlink(d) if os.path.islink(d) else 'not a link'})\n")
             sys.exit(0)
 
+        # Our flatpak-spawn first in the app's PATH: nested sandboxes (glycin's image loaders) run directly.
+        if os.path.isdir(SPAWN_DIR):
+            tree.bind(SPAWN_DIR, "/run/host/andromarchy-bin")
+            env["PATH"] = "/run/host/andromarchy-bin:" + env.get("PATH", "/app/bin:/usr/bin")
         glibc = runtime_glibc(tree)
         loader = real(glibc + "/ld-linux-aarch64.so.1")
         T = real(tree.path)
