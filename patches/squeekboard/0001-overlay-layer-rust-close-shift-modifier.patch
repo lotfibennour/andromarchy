@@ -1,3 +1,41 @@
+diff --git i/src/keyboard.rs w/src/keyboard.rs
+index cc5df3d..80bdb9b 100644
+--- i/src/keyboard.rs
++++ w/src/keyboard.rs
+@@ -378,6 +378,20 @@ fn generate_keymap(
+     )?;
+     
+     for (name, keycode) in pairs {
++        // Andromarchy: an uppercase letter is the Shift level of its lowercase one, as on a hardware keyboard:
++        // the compositor matches shortcuts on the unshifted keysym (Super+Shift+F = Shift + f).
++        let upper_letter = name.len() == 1 && name.chars().all(|c| c.is_ascii_uppercase());
++        if upper_letter {
++            write!(
++                buf,
++                "
++key <I{}> {{ type = \"SQ_LETTER\", [ {}, {} ] }};",
++                keycode,
++                name.to_ascii_lowercase(),
++                name,
++            )?;
++            continue;
++        }
+         write!(
+             buf,
+             "
+@@ -412,6 +426,12 @@ key <I{}> {{ [ {} ] }};",
+         type \"SHIFT+ALT\" {{
+             level_name[Level1]= \"Base\";
+         }};
++        type \"SQ_LETTER\" {{
++            modifiers= Shift;
++            map[Shift]= Level2;
++            level_name[Level1]= \"Base\";
++            level_name[Level2]= \"Shift\";
++        }};
+ 
+     }};
+ 
 diff --git i/src/layout.rs w/src/layout.rs
 index 75a5c94..98b8790 100644
 --- i/src/layout.rs
