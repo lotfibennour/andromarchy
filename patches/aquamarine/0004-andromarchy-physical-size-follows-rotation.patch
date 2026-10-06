@@ -1,18 +1,11 @@
 diff --git a/src/backend/Andromarchy.cpp b/src/backend/Andromarchy.cpp
 --- a/src/backend/Andromarchy.cpp
 +++ b/src/backend/Andromarchy.cpp
-@@ -547,6 +547,7 @@
-     // after a rotation the output mode follows, and the compositor reconfigures (events.state, like the Wayland backend).
-     if (output && size != oldSize) {
-         fprintf(stderr, "andromarchy: screen is now %.0fx%.0f\n", size.x, size.y);
-+        orientPhysicalSize(output.get(), size);
-         output->modes.clear();
-         output->modes.emplace_back(SP<SOutputMode>(new SOutputMode(size, (unsigned int)refreshmHz, true)));
-         output->events.state.emit(IOutput::SStateEvent{.size = size});
-@@ -630,12 +631,21 @@
-     return {};
- }
- 
+@@ -18,6 +18,14 @@
+ #include "andromarchy/display_producer.h"
+ #include "andromarchy/andromarchy_audio.h"
+ #include "andromarchy/andromarchy_camera.h"
++
 +// The physical size (mm, from Android) follows the screen orientation: clients size themselves from it
 +// (Squeekboard in portrait drew flattened keys with the landscape width).
 +static void orientPhysicalSize(Aquamarine::IOutput* out, const Hyprutils::Math::Vector2D& px) {
@@ -20,6 +13,21 @@ diff --git a/src/backend/Andromarchy.cpp b/src/backend/Andromarchy.cpp
 +    if (mm.x > 0 && mm.y > 0 && (px.x < px.y) != (mm.x < mm.y))
 +        mm = {mm.y, mm.x};
 +}
+ }
+ 
+ using namespace Aquamarine;
+@@ -547,6 +555,7 @@
+     // after a rotation the output mode follows, and the compositor reconfigures (events.state, like the Wayland backend).
+     if (output && size != oldSize) {
+         fprintf(stderr, "andromarchy: screen is now %.0fx%.0f\n", size.x, size.y);
++        orientPhysicalSize(output.get(), size);
+         output->modes.clear();
+         output->modes.emplace_back(SP<SOutputMode>(new SOutputMode(size, (unsigned int)refreshmHz, true)));
+         output->events.state.emit(IOutput::SStateEvent{.size = size});
+@@ -630,12 +639,14 @@
+     return {};
+ }
+ 
 +
  bool Aquamarine::CAndromarchyBackend::createOutput(const std::string& name) {
      if (output)
