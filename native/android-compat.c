@@ -865,10 +865,13 @@ static int linked_copy(const char *path)
 {
     int n = 0;
     struct stat k;
+    // Both names count, as on a real link: gpg's dotlock links its temp file to the lock and checks the LOCK's
+    // count; with 1 there it took its own lock for a stale one and looped forever (pacman-key --init).
     for (int i = 0; path && i < 16; i++)
-        if (linked_copies[i][0][0] && strcmp(linked_copies[i][0], path) == 0 &&
-            syscall(SYS_newfstatat, AT_FDCWD, linked_copies[i][1], &k, 0) == 0)
-            n++;
+        for (int side = 0; side < 2; side++)
+            if (linked_copies[i][side][0] && strcmp(linked_copies[i][side], path) == 0 &&
+                syscall(SYS_newfstatat, AT_FDCWD, linked_copies[i][!side], &k, 0) == 0)
+                n++;
     return n;
 }
 
@@ -911,6 +914,29 @@ STAT_WRAP(lstat64, struct stat64)
     }
 FSTATAT_WRAP(fstatat, struct stat)
 FSTATAT_WRAP(fstatat64, struct stat64)
+
+// fstat on a linked file's fd (gpg's dotlock keeps its temp file open and checks the link count with fstat). Only
+// once this process made a link fallback: the /proc/self/fd lookup stays off the hot path.
+#define FSTAT_WRAP(name, type)                                                                                        \
+    int name(int fd, type *st)                                                                                         \
+    {                                                                                                                  \
+        static int (*next)(int, type *);                                                                              \
+        if (!next)                                                                                                     \
+            next = dlsym(RTLD_NEXT, #name);                                                                            \
+        int r = next(fd, st);                                                                                          \
+        if (r == 0 && st->st_nlink == 1 && linked_copies[0][0][0]) {                                                   \
+            char fdp[32], path[512];                                                                                   \
+            snprintf(fdp, sizeof fdp, "/proc/self/fd/%d", fd);                                                         \
+            ssize_t n = readlink(fdp, path, sizeof path - 1); /* through fakechroot: the guest path */                \
+            if (n > 0) {                                                                                               \
+                path[n] = 0;                                                                                           \
+                st->st_nlink += linked_copy(path);                                                                     \
+            }                                                                                                          \
+        }                                                                                                              \
+        return r;                                                                                                      \
+    }
+FSTAT_WRAP(fstat, struct stat)
+FSTAT_WRAP(fstat64, struct stat64)
 
 int access(const char *path, int mode)
 {
@@ -971,8 +997,13 @@ int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int fla
         static int slot;
         if (r == 0 && olddirfd == AT_FDCWD && newdirfd == AT_FDCWD && strlen(old) < sizeof linked_copies[0][0] &&
             strlen(new) < sizeof linked_copies[0][1]) {
-            strcpy(linked_copies[slot % 16][0], old);
-            strcpy(linked_copies[slot++ % 16][1], new);
+            int known = 0; // the same pair linked again (gpg relinks its temp file to the lock): counted once
+            for (int i = 0; i < 16 && !known; i++)
+                known = strcmp(linked_copies[i][0], old) == 0 && strcmp(linked_copies[i][1], new) == 0;
+            if (!known) {
+                strcpy(linked_copies[slot % 16][0], old);
+                strcpy(linked_copies[slot++ % 16][1], new);
+            }
         }
     }
     return r;
