@@ -23,7 +23,7 @@ export FAKECHROOT_BASE=$R
 # No FAKECHROOT_ELFLOADER_OPT_ARGV0: with it, fakechroot 2.20.1 drops the script path when exec'ing a #! script.
 export FAKECHROOT_ELFLOADER=$G/ld-linux-aarch64.so.1
 # ARCH_EXCLUDE_EXTRA / ARCH_LIBPATH_EXTRA: host paths that must stay host paths (e.g. Termux's tmp with the
-# Anland/Wayland sockets) and extra host library dirs searched first (e.g. our aquamarine build).
+# Andromarchy/Wayland sockets) and extra host library dirs searched first (e.g. our aquamarine build).
 export FAKECHROOT_EXCLUDE_PATH=/dev:/proc:/sys${ARCH_EXCLUDE_EXTRA:+:$ARCH_EXCLUDE_EXTRA}
 # We never use /etc/ld.so.cache (ldconfig is a no-op here), so the extra dirs packages declare in
 # /etc/ld.so.conf.d (e.g. /usr/lib/libproxy for quickshell) go on the search path explicitly.
@@ -46,9 +46,9 @@ export TZDIR=$R/usr/share/zoneinfo TZ=${TZ:-$(getprop persist.sys.timezone 2>/de
 export APPIMAGE_EXTRACT_AND_RUN=1
 
 # GPU for every program, not only those Hyprland starts: Adreno through KGSL (no DRM node on Android).
-# The ANLAND* variables are what make the KGSL Mesa expose dmabuf import/export, which Wayland GPU clients need.
+# The ANDROMARCHY* variables are what make the KGSL Mesa expose dmabuf import/export, which Wayland GPU clients need.
 # ARCH_GPU=zink runs OpenGL on top of Vulkan/Turnip instead of Freedreno's native GL driver.
-export ANLAND=1 ANLAND_NO_DRM_DEVICE=1 TURNIP_KMD=kgsl FD_FORCE_KGSL=1 XWAYLAND_FORCE_KGSL_SURFACELESS=1
+export ANDROMARCHY=1 ANDROMARCHY_NO_DRM_DEVICE=1 TURNIP_KMD=kgsl FD_FORCE_KGSL=1 XWAYLAND_FORCE_KGSL_SURFACELESS=1
 if [ "${ARCH_GPU:-freedreno}" = zink ]; then
   export MESA_LOADER_DRIVER_OVERRIDE=zink GALLIUM_DRIVER=zink
 else

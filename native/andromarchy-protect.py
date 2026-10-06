@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /usr/local/bin/andromarchy-protect: keeps Andromarchy's own builds in place across pacman transactions.
 #
-# Our Mesa (KGSL), Hyprland and aquamarine (Anland backend) replace files that belong to Arch packages, and our Mesa
+# Our Mesa (KGSL), Hyprland and aquamarine (Andromarchy backend) replace files that belong to Arch packages, and our Mesa
 # is built against the repo's LLVM, which a partial update may move ahead of it. An update, an app install pulling a dependency, or a full
 # -Syu could overwrite or remove them: the session would not start (black screen).
 #

@@ -1,12 +1,12 @@
 // Andromarchy: Omarchy (Arch Linux ARM + Hyprland) on Android in one APK, without root or proot.
 // Base: lfdevs/anland-termux's display app (GPL-3.0, see LICENSE-anland-termux / UPSTREAM-anland-termux.txt), run
-// as its own app: the Anland daemon and the Arch launcher are built with the NDK and shipped as native libraries.
+// as its own app: the Andromarchy daemon and the Arch launcher are built with the NDK and shipped as native libraries.
 plugins {
     id "com.android.application" version "9.4.0"
 }
 
 android {
-    namespace = "com.anland.termux" // Java package of the imported code, kept to limit the diff with upstream
+    namespace = "andro.marchy" // Java package of the imported code, kept to limit the diff with upstream
     compileSdk = 36
 
     buildFeatures {
@@ -18,7 +18,7 @@ android {
         applicationId = "andro.marchy" // short: the app's files path ends up in 108-byte Unix socket paths
         // targetSdk 28: Android only lets apps targeting <= 28 execute files from their own data dir (W^X), which
         // running the Arch rootfs needs. Hence distribution outside the Play Store.
-        // Android 11+: the Anland native code needs API 30 (memfd_create). minSdk above targetSdk only draws a
+        // Android 11+: the Andromarchy native code needs API 30 (memfd_create). minSdk above targetSdk only draws a
         // Gradle warning; Android installs and runs such apps.
         minSdk = 30
         targetSdk = 28
@@ -34,7 +34,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                // The Anland native code uses memfd_create, declared by bionic from API 30 (Android 11).
+                // The Andromarchy native code uses memfd_create, declared by bionic from API 30 (Android 11).
                 arguments "-DANDROID_STL=none", "-DANDROID_PLATFORM=android-30"
             }
         }
@@ -68,12 +68,12 @@ android {
 }
 
 // Executables the app runs, built with the NDK and shipped as lib*.so so that Android extracts them to the
-// executable nativeLibraryDir: the Anland display daemon, lotfix-run (the Arch launcher, ../native/launcher) and
+// executable nativeLibraryDir: the Andromarchy display daemon, lotfix-run (the Arch launcher, ../native/launcher) and
 // the termux-va video daemon. Entries starting with "-" are compiler/linker flags.
 // 16 KB-aligned segments for Android 15+ devices with 16 KB pages.
 def jniOut = file("src/main/jniLibs/arm64-v8a")
 def executables = [
-    "libanland.so"   : ["native/anland/anland.c", "native/anland/common/socket_utils.c"],
+    "libandromarchy.so"   : ["native/andromarchy/andromarchy.c", "native/andromarchy/common/socket_utils.c"],
     "liblotfixrun.so": ["../native/launcher/lotfix-run.c"],
     // termux-va (lfdevs, GPL-3.0): MediaCodec hardware video for the VA-API of Mesa's termuxva bridge
     "libtermuxva.so" : ["../third_party/termux-va/daemon/termux-va.c", "-std=c11",

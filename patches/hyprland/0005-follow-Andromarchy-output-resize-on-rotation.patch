@@ -1,0 +1,32 @@
+From: Lotfix
+Subject: [PATCH] output: reload after Andromarchy output resizes (tablet rotation)
+
+Andromarchy resizes its output when the Android device rotates (Hyprland treats it
+as user-created and applies the new size). Layer surfaces keep the old size
+until a reload: do one right after, as "hyprctl reload" would.
+---
+diff --git a/src/output/Monitor.cpp b/src/output/Monitor.cpp
+index e69d8dd..c3f4ac0 100644
+--- a/src/output/Monitor.cpp
++++ b/src/output/Monitor.cpp
+@@ -7,6 +7,7 @@
+ #include "../protocols/ColorManagement.hpp"
+ #include "../Compositor.hpp"
+ #include "../config/ConfigValue.hpp"
++#include "../config/ConfigManager.hpp"
+ #include "../config/shared/monitor/MonitorRuleManager.hpp"
+ #include "../config/shared/workspace/WorkspaceRuleManager.hpp"
+ #include "../config/shared/animation/AnimationTree.hpp"
+@@ -240,6 +241,12 @@ void CMonitor::onConnect(bool noRule) {
+         rule.m_resolution = SIZE;
+ 
+         applyMonitorRule(std::move(rule));
++
++        // Andromarchy: Android resized the output (tablet rotation). The new size alone leaves layer surfaces (Omarchy's bar,
++        // wallpaper, menus) at the old one; a reload right after, like "hyprctl reload", re-applies the configured rule
++        // and the shell rebuilds its per-screen surfaces.
++        if (getenv("ANDROMARCHY"))
++            g_pEventLoopManager->doLater([] { Config::mgr()->reload(); });
+     });
+ 
+     m_frameScheduler         = makeUnique<CMonitorFrameScheduler>(m_self.lock());

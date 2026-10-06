@@ -22,7 +22,7 @@
 
 #include "protocol.h"
 
-#define TAG "AnlandCam"
+#define TAG "AndromarchyCam"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
@@ -639,7 +639,7 @@ static void *io_thread_func(void *arg)
  * registers SERVICE_TYPE_CAMERA so the producer can request it. The activity arg
  * is unused (the NDK needs no Context); the CAMERA permission is requested in Java. */
 JNIEXPORT void JNICALL
-Java_com_anland_termux_CameraServices_nativeInitCameraService(
+Java_andro_marchy_CameraServices_nativeInitCameraService(
     JNIEnv *env, jclass clazz, jobject activity)
 {
     (void)env;
@@ -649,7 +649,7 @@ Java_com_anland_termux_CameraServices_nativeInitCameraService(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_CameraServices_nativeDestroyCameraService(
+Java_andro_marchy_CameraServices_nativeDestroyCameraService(
     JNIEnv *env, jclass clazz)
 {
     (void)env;
@@ -780,7 +780,7 @@ static int create_camera_shm(int i)
     size_t slot_bytes = (w > 0 && h > 0) ? (size_t)w * h * 3 / 2 : CAM_FALLBACK_BYTES;
     g_camera.slot_bytes[i] = slot_bytes;
 
-    int fd = ASharedMemory_create("anland-camera", CAMERA_SLOTS * slot_bytes);
+    int fd = ASharedMemory_create("andromarchy-camera", CAMERA_SLOTS * slot_bytes);
     if (fd < 0) {
         LOGE("init: ASharedMemory_create[%d] failed", i);
         return -1;

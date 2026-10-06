@@ -1,0 +1,48 @@
+diff --git a/src/helpers/MiscFunctions.cpp b/src/helpers/MiscFunctions.cpp
+index be4f033..662fe75 100644
+--- a/src/helpers/MiscFunctions.cpp
++++ b/src/helpers/MiscFunctions.cpp
+@@ -634,7 +634,21 @@ std::pair<CFileDescriptor, std::string> openExclusiveShm() {
+     return {{}, ""};
+ }
+ 
++// Andromarchy (Android, no proot): there is no /dev/shm, and glibc's shm_open() opens it internally (no fakechroot
++// rewrite), so keymaps and other shared files fail. Use an anonymous memfd instead.
++static bool useMemfd() {
++    static const bool memfd = getenv("ANDROMARCHY");
++    return memfd;
++}
++
+ CFileDescriptor allocateSHMFile(size_t len) {
++    if (useMemfd()) {
++        CFileDescriptor fd{memfd_create("hyprland-shm", MFD_CLOEXEC)};
++        if (!fd.isValid() || ftruncate(fd.get(), len) < 0)
++            return {};
++        return fd;
++    }
++
+     auto [fd, name] = openExclusiveShm();
+     if (!fd.isValid())
+         return {};
+@@ -654,6 +668,21 @@ CFileDescriptor allocateSHMFile(size_t len) {
+ }
+ 
+ bool allocateSHMFilePair(size_t size, CFileDescriptor& rw_fd_ptr, CFileDescriptor& ro_fd_ptr) {
++    if (useMemfd()) {
++        // Android's SELinux refuses re-opening a memfd through /proc/self/fd, so the "read-only" twin is a dup;
++        // the size is sealed so clients cannot grow/shrink it under us.
++        CFileDescriptor rw{memfd_create("hyprland-shm", MFD_CLOEXEC | MFD_ALLOW_SEALING)};
++        if (!rw.isValid() || ftruncate(rw.get(), size) < 0)
++            return false;
++        CFileDescriptor ro{fcntl(rw.get(), F_DUPFD_CLOEXEC, 0)};
++        if (!ro.isValid())
++            return false;
++        fcntl(rw.get(), F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL);
++        rw_fd_ptr = std::move(rw);
++        ro_fd_ptr = std::move(ro);
++        return true;
++    }
++
+     auto [fd, name] = openExclusiveShm();
+     if (!fd.isValid()) {
+         return false;

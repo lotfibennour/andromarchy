@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds aquamarine (Anland backend) and Hyprland (our patches) natively on an aarch64 Arch: on the tablet
+# Builds aquamarine (Andromarchy backend) and Hyprland (our patches) natively on an aarch64 Arch: on the tablet
 # through "proot-distro login archlinux" (the no-proot runtime cannot run gcc yet: posix_spawn), in minutes
 # instead of hours of qemu on a PC. Installs nothing on the running system: everything goes to a staging
 # tree, packed as lotfix-hyprland-aarch64.tar.zst, which build-rootfs.sh unpacks into the rootfs.

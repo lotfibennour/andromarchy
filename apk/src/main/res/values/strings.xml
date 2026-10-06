@@ -104,9 +104,9 @@
     <!-- Settings notification -->
     <string name="notification_switch">Show settings notification</string>
     <string name="notification_hint">Shows a persistent notification while the app is open. Its tap and button responses are configured below. Turning this off hides the notification. Takes effect on next return to the app.</string>
-    <string name="notification_channel_name">Anland Termux</string>
-    <string name="notification_channel_desc">Anland quick access</string>
-    <string name="notification_title">Anland Termux</string>
+    <string name="notification_channel_name">Andromarchy Termux</string>
+    <string name="notification_channel_desc">Andromarchy quick access</string>
+    <string name="notification_title">Andromarchy Termux</string>
     <string name="notification_text">Tap or pull down for configured actions</string>
 
     <!-- User actions -->

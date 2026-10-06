@@ -8,13 +8,13 @@ V=${1:-}
 # taken from the Omarchy shell, which Hyprland started.
 qs=$(pgrep -x quickshell | head -1)
 [ -n "$qs" ] && while IFS= read -r -d '' kv; do case $kv in
-  DBUS_*|DISPLAY=*|WAYLAND_DISPLAY=*|XDG_RUNTIME_DIR=*|LIBVA_*|TERMUX_VA_*|MESA_*|FD_*|TU_*|TURNIP_*|GALLIUM_*|ANLAND*|XWAYLAND_*|EGL_*) export "$kv";;
+  DBUS_*|DISPLAY=*|WAYLAND_DISPLAY=*|XDG_RUNTIME_DIR=*|LIBVA_*|TERMUX_VA_*|MESA_*|FD_*|TU_*|TURNIP_*|GALLIUM_*|ANDROMARCHY*|XWAYLAND_*|EGL_*) export "$kv";;
 esac; done < /proc/$qs/environ
 # Same environment as the session's apps (bus addresses, DISPLAY, VA-API...), wherever this runs from (adb, ssh):
 # taken from the Omarchy shell, which Hyprland started.
 qs=$(pgrep -x quickshell | head -1)
 [ -n "$qs" ] && while IFS= read -r -d '' kv; do case $kv in
-  DBUS_*|DISPLAY=*|WAYLAND_DISPLAY=*|XDG_RUNTIME_DIR=*|LIBVA_*|TERMUX_VA_*|MESA_*|FD_*|TU_*|TURNIP_*|GALLIUM_*|ANLAND*|XWAYLAND_*|EGL_*) export "$kv";;
+  DBUS_*|DISPLAY=*|WAYLAND_DISPLAY=*|XDG_RUNTIME_DIR=*|LIBVA_*|TERMUX_VA_*|MESA_*|FD_*|TU_*|TURNIP_*|GALLIUM_*|ANDROMARCHY*|XWAYLAND_*|EGL_*) export "$kv";;
 esac; done < /proc/$qs/environ
 pass=0; fail=0; failed=()
 t() { # t "name" command...: PASS if the command succeeds within 20 s

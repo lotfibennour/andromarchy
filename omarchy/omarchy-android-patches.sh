@@ -17,9 +17,10 @@ grep -q 'command -v ttfx >/dev/null || exit 0' "$O/bin/omarchy-launch-screensave
   sed -i '0,/^pgrep -f .\[o\]rg.omarchy.screensaver/s//# Android\/ARM: no ttfx, no screensaver (its window opened and closed at once: a black blink)\ncommand -v ttfx >\/dev\/null || exit 0\n&/' \
     "$O/bin/omarchy-launch-screensaver"
 
-# The app's display (Hyprland output ANLAND-1) is the built-in panel: Omarchy recognises one by its connector name
+# The app's display (Hyprland output ANDROMARCHY-1) is the built-in panel: Omarchy recognises one by its connector name
 # (eDP/LVDS/DSI), e.g. for the brightness keys and the monitor panel's slider.
-grep -rl 'eDP|LVDS|DSI)' "$O"/bin "$O"/shell | xargs -r sed -i 's/(eDP|LVDS|DSI)/(eDP|LVDS|DSI|ANLAND)/g'
+grep -rl 'eDP|LVDS|DSI)' "$O"/bin "$O"/shell | xargs -r sed -i 's/(eDP|LVDS|DSI)/(eDP|LVDS|DSI|ANDROMARCHY)/g'
+grep -rl 'DSI|ANLAND)' "$O"/bin "$O"/shell | xargs -r sed -i 's/(eDP|LVDS|DSI|ANLAND)/(eDP|LVDS|DSI|ANDROMARCHY)/g' # the output's former name
 
 # First run (omarchy-provision-first-run, each login until every step succeeds): its user units are hardware ones
 # (Bluetooth agent, sleep lock, monitor recovery, fcitx5, crash watch); enabling them here always failed, so

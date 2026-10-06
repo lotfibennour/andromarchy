@@ -1,0 +1,40 @@
+diff --git a/src/render/OpenGL.cpp b/src/render/OpenGL.cpp
+index baee1ad..09c4317 100644
+--- a/src/render/OpenGL.cpp
++++ b/src/render/OpenGL.cpp
+@@ -158,7 +158,11 @@ void CHyprOpenGLImpl::initEGL(bool gbm) {
+ 
+     attrs.push_back(EGL_NONE);
+ 
+-    m_eglDisplay = m_proc.eglGetPlatformDisplayEXT(gbm ? EGL_PLATFORM_GBM_KHR : EGL_PLATFORM_DEVICE_EXT, gbm ? m_gbmDevice : m_eglDevice, attrs.data());
++    // Andromarchy (Android): no DRM device exists, the display daemon hands us KGSL dmabufs. Render surfaceless.
++    if (getenv("ANDROMARCHY"))
++        m_eglDisplay = m_proc.eglGetPlatformDisplayEXT(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, attrs.data());
++    else
++        m_eglDisplay = m_proc.eglGetPlatformDisplayEXT(gbm ? EGL_PLATFORM_GBM_KHR : EGL_PLATFORM_DEVICE_EXT, gbm ? m_gbmDevice : m_eglDevice, attrs.data());
+     if (m_eglDisplay == EGL_NO_DISPLAY)
+         RASSERT(false, "EGL: failed to create a platform display");
+ 
+@@ -174,6 +178,9 @@ void CHyprOpenGLImpl::initEGL(bool gbm) {
+     m_exts.EXT_create_context_robustness      = EGLEXTENSIONS.contains("EXT_create_context_robustness");
+     m_exts.EXT_image_dma_buf_import           = EGLEXTENSIONS.contains("EXT_image_dma_buf_import");
+     m_exts.EXT_image_dma_buf_import_modifiers = EGLEXTENSIONS.contains("EXT_image_dma_buf_import_modifiers");
++    // The KGSL Mesa imports dmabufs (EGL_LINUX_DMA_BUF_EXT) without advertising the extension.
++    if (getenv("ANDROMARCHY"))
++        m_exts.EXT_image_dma_buf_import = true;
+     m_exts.KHR_context_flush_control          = EGLEXTENSIONS.contains("EGL_KHR_context_flush_control");
+ 
+     if (m_exts.IMG_context_priority) {
+@@ -330,7 +337,11 @@ CHyprOpenGLImpl::CHyprOpenGLImpl() : m_drmFD(g_pCompositor->m_drmRenderNode.fd >
+     RASSERT(eglBindAPI(EGL_OPENGL_ES_API) != EGL_FALSE, "Couldn't bind to EGL's opengl ES API. This means your gpu driver f'd up. This is not a hyprland issue.");
+ 
+     bool success = false;
+-    if (EGLEXTENSIONS.contains("EXT_platform_device") || !m_proc.eglQueryDevicesEXT || !m_proc.eglQueryDeviceStringEXT) {
++    if (getenv("ANDROMARCHY")) {
++        RASSERT(EGLEXTENSIONS.contains("EGL_MESA_platform_surfaceless"), "ANDROMARCHY set but EGL_MESA_platform_surfaceless is missing");
++        success = true;
++        initEGL(false);
++    } else if (EGLEXTENSIONS.contains("EXT_platform_device") || !m_proc.eglQueryDevicesEXT || !m_proc.eglQueryDeviceStringEXT) {
+         m_eglDevice = eglDeviceFromDRMFD(m_drmFD);
+ 
+         if (m_eglDevice != EGL_NO_DEVICE_EXT) {

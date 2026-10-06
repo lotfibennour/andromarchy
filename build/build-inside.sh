@@ -44,7 +44,7 @@ pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
 mkdir -p /tmp/fr && tar -xzf $L/fakeroot.tar.gz -C /tmp/fr --strip-components=1
 (cd /tmp/fr && ./configure --prefix=/usr/local --with-ipc=tcp && make -j"$(nproc)" && make install)
 
-# aquamarine (Anland backend) + Hyprland (our patches), compiled natively by build-hyprland.sh: over Arch's copies.
+# aquamarine (Andromarchy backend) + Hyprland (our patches), compiled natively by build-hyprland.sh: over Arch's copies.
 tar -xf $L/lotfix-hyprland-aarch64.tar.zst -C /
 # Only now: ignored earlier, pacman could not resolve them as hyprland dependencies.
 grep -q '^IgnorePkg.*hyprland' $C || sed -i "/^IgnorePkg/ s/$/ aquamarine hyprland/" $C

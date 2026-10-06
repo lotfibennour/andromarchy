@@ -386,7 +386,7 @@ def main():
             env.setdefault("MOZ_ACCELERATED", "1")
         compat = real("/opt/lotfix/android-compat.so")
         fc = real("/usr/lib/libfakeroot/fakechroot/libfakechroot.so")
-        for k in ("ANLAND", "ANLAND_NO_DRM_DEVICE", "TURNIP_KMD", "FD_FORCE_KGSL", "MESA_LOADER_DRIVER_OVERRIDE",
+        for k in ("ANDROMARCHY", "ANDROMARCHY_NO_DRM_DEVICE", "TURNIP_KMD", "FD_FORCE_KGSL", "MESA_LOADER_DRIVER_OVERRIDE",
                   "GALLIUM_DRIVER", "WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "ANDROMARCHY_VENDOR",
                   "ANDROMARCHY_MODEL", "TZ"):
             if k in os.environ and k not in env:

@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     setenv("FAKECHROOT_BASE", R, 1);
     // No FAKECHROOT_ELFLOADER_OPT_ARGV0: with it, fakechroot 2.20.1 drops the script path when exec'ing a #! script.
     setenv("FAKECHROOT_ELFLOADER", loader, 1);
-    // ARCH_EXCLUDE_EXTRA: host paths that must stay host paths (the Anland/Wayland socket dirs).
+    // ARCH_EXCLUDE_EXTRA: host paths that must stay host paths (the Andromarchy/Wayland socket dirs).
     const char *ex = getenv("ARCH_EXCLUDE_EXTRA");
     setf("FAKECHROOT_EXCLUDE_PATH", "/dev:/proc:/sys%s%s", ex && *ex ? ":" : "", ex && *ex ? ex : "");
 
@@ -182,10 +182,10 @@ int main(int argc, char **argv)
     setf("TZDIR", "%s/usr/share/zoneinfo", R);
     setenv("APPIMAGE_EXTRACT_AND_RUN", "1", 1);
 
-    // GPU for every program: Adreno through KGSL (no DRM node). The ANLAND* variables make the KGSL Mesa expose
+    // GPU for every program: Adreno through KGSL (no DRM node). The ANDROMARCHY* variables make the KGSL Mesa expose
     // dmabuf import/export, which Wayland GPU clients need. ARCH_GPU=zink: OpenGL on Vulkan/Turnip.
-    setenv("ANLAND", "1", 1);
-    setenv("ANLAND_NO_DRM_DEVICE", "1", 1);
+    setenv("ANDROMARCHY", "1", 1);
+    setenv("ANDROMARCHY_NO_DRM_DEVICE", "1", 1);
     setenv("TURNIP_KMD", "kgsl", 1);
     setenv("FD_FORCE_KGSL", "1", 1);
     setenv("XWAYLAND_FORCE_KGSL_SURFACELESS", "1", 1);

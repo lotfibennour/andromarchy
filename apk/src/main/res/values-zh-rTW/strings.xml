@@ -104,9 +104,9 @@
     <!-- Settings notification -->
     <string name="notification_switch">顯示設定通知</string>
     <string name="notification_hint">應用程式開啟時顯示一則常駐通知，其點按和按鈕回應可在下方設定。關閉後不再顯示。下次返回應用程式時生效。</string>
-    <string name="notification_channel_name">Anland Termux</string>
-    <string name="notification_channel_desc">Anland 快速存取</string>
-    <string name="notification_title">Anland Termux</string>
+    <string name="notification_channel_name">Andromarchy Termux</string>
+    <string name="notification_channel_desc">Andromarchy 快速存取</string>
+    <string name="notification_title">Andromarchy Termux</string>
     <string name="notification_text">點按或下拉以使用已設定的操作</string>
 
     <!-- User actions -->

@@ -103,7 +103,7 @@ static void chromium_no_sandbox(int argc, char **argv)
     int n = 0;
     av[n++] = argv[0];
     av[n++] = "--no-sandbox";
-    // Cameras are PipeWire nodes here (the Anland backend's Android cameras; no /dev/video*): the portal path.
+    // Cameras are PipeWire nodes here (the Andromarchy backend's Android cameras; no /dev/video*): the portal path.
     // (one --enable-features: Chromium keeps only the last one)
     av[n++] = va ? "--enable-features=WebRtcPipeWireCamera,AcceleratedVideoDecodeLinuxGL,"
                    "AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder,VaapiIgnoreDriverChecks"

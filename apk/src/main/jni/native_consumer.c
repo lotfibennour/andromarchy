@@ -23,7 +23,7 @@
 #include "protocol.h"
 #include "socket_utils.h"
 
-#define TAG "Anland"
+#define TAG "Andromarchy"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
@@ -82,7 +82,7 @@ static struct consumer_state g_state = {
 /* Connection config, set from Java via nativeConfigure() and read on each
  * (re)connect in do_connect(). Guarded by cfg_lock. */
 static pthread_mutex_t cfg_lock = PTHREAD_MUTEX_INITIALIZER;
-static char cfg_socket_path[256] = "/data/data/andro.marchy/files/run/anland/display_daemon.sock";
+static char cfg_socket_path[256] = "/data/data/andro.marchy/files/run/andromarchy/display_daemon.sock";
 static bool cfg_use_root = false;
 static bool cfg_use_compatible_bridge = false;
 static int cfg_compatible_fd = -1;
@@ -645,7 +645,7 @@ static void copy_jstring(JNIEnv *env, jstring js, char *dst, size_t dstsz)
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeConfigure(
+Java_andro_marchy_Native_nativeConfigure(
     JNIEnv *env, jclass clazz, jstring socketPath, jboolean useRoot,
     jstring helperPath, jstring bridgePath)
 {
@@ -664,7 +664,7 @@ Java_com_anland_termux_Native_nativeConfigure(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSetCompatibleMode(
+Java_andro_marchy_Native_nativeSetCompatibleMode(
     JNIEnv *env, jclass clazz, jboolean enabled)
 {
     (void)env;
@@ -682,7 +682,7 @@ Java_com_anland_termux_Native_nativeSetCompatibleMode(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSetCompatibleFd(
+Java_andro_marchy_Native_nativeSetCompatibleFd(
     JNIEnv *env, jclass clazz, jint fd)
 {
     (void)env;
@@ -701,7 +701,7 @@ Java_com_anland_termux_Native_nativeSetCompatibleFd(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSetCustomResolution(
+Java_andro_marchy_Native_nativeSetCustomResolution(
     JNIEnv* env, jclass clazz, jint width, jint height)
 {
     pthread_mutex_lock(&cfg_lock);
@@ -712,7 +712,7 @@ Java_com_anland_termux_Native_nativeSetCustomResolution(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeStart(
+Java_andro_marchy_Native_nativeStart(
     JNIEnv *env, jclass clazz, jobject surface, jobject callbackTarget)
 {
     if (!api_loaded) {
@@ -776,7 +776,7 @@ Java_com_anland_termux_Native_nativeStart(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeStop(
+Java_andro_marchy_Native_nativeStop(
     JNIEnv *env, jclass clazz)
 {
     pthread_mutex_lock(&g_state.lock);
@@ -835,7 +835,7 @@ Java_com_anland_termux_Native_nativeStop(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSetRefreshRate(
+Java_andro_marchy_Native_nativeSetRefreshRate(
     JNIEnv *env, jclass clazz, jfloat hz)
 {
     if (hz <= 0.0f)
@@ -846,7 +846,7 @@ Java_com_anland_termux_Native_nativeSetRefreshRate(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendTouch(
+Java_andro_marchy_Native_nativeSendTouch(
     JNIEnv *env, jclass clazz, jint action, jfloat x, jfloat y, jint pointer_id)
 {
     if (!g_state.ctx)
@@ -859,7 +859,7 @@ Java_com_anland_termux_Native_nativeSendTouch(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendTouchFrame(
+Java_andro_marchy_Native_nativeSendTouchFrame(
     JNIEnv *env, jclass clazz)
 {
     if (!g_state.ctx)
@@ -871,7 +871,7 @@ Java_com_anland_termux_Native_nativeSendTouchFrame(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendKey(
+Java_andro_marchy_Native_nativeSendKey(
     JNIEnv *env, jclass clazz, jint action, jint keycode)
 {
     if (!g_state.ctx)
@@ -884,7 +884,7 @@ Java_com_anland_termux_Native_nativeSendKey(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendMouseMotion(
+Java_andro_marchy_Native_nativeSendMouseMotion(
     JNIEnv *env, jclass clazz, jfloat x, jfloat y, jfloat dx, jfloat dy)
 {
     if (!g_state.ctx)
@@ -907,7 +907,7 @@ Java_com_anland_termux_Native_nativeSendMouseMotion(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendMouseButton(
+Java_andro_marchy_Native_nativeSendMouseButton(
     JNIEnv *env, jclass clazz, jint button, jboolean pressed)
 {
     if (!g_state.ctx)
@@ -920,7 +920,7 @@ Java_com_anland_termux_Native_nativeSendMouseButton(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendMouseScroll(
+Java_andro_marchy_Native_nativeSendMouseScroll(
     JNIEnv *env, jclass clazz, jint axis, jfloat value)
 {
     if (!g_state.ctx)
@@ -933,7 +933,7 @@ Java_com_anland_termux_Native_nativeSendMouseScroll(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendClipboard(
+Java_andro_marchy_Native_nativeSendClipboard(
     JNIEnv *env, jclass clazz, jbyteArray data)
 {
     if (!g_state.ctx)
@@ -957,7 +957,7 @@ Java_com_anland_termux_Native_nativeSendClipboard(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSendTextInput(
+Java_andro_marchy_Native_nativeSendTextInput(
     JNIEnv *env, jclass clazz, jbyteArray data)
 {
     if (!g_state.ctx)
@@ -981,21 +981,21 @@ Java_com_anland_termux_Native_nativeSendTextInput(
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSetMicEnabled(
+Java_andro_marchy_Native_nativeSetMicEnabled(
     JNIEnv *env, jclass clazz, jboolean enabled)
 {
     audio_set_mic_enabled(enabled == JNI_TRUE);
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSetAudioLatency(
+Java_andro_marchy_Native_nativeSetAudioLatency(
     JNIEnv *env, jclass clazz, jint speakerMs, jint micMs)
 {
     audio_set_latency(speakerMs, micMs);
 }
 
 JNIEXPORT void JNICALL
-Java_com_anland_termux_Native_nativeSetAudioKeepalive(
+Java_andro_marchy_Native_nativeSetAudioKeepalive(
     JNIEnv *env, jclass clazz, jboolean enabled)
 {
     audio_set_keepalive(enabled == JNI_TRUE);

@@ -8,7 +8,7 @@
         <intent
             android:action="android.intent.action.MAIN"
             android:category="android.intent.category.LAUNCHER"
-            android:targetClass="com.anland.termux.SettingsActivity"
+            android:targetClass="andro.marchy.SettingsActivity"
             android:targetPackage="andro.marchy"/>
     </shortcut>
 </shortcuts>
