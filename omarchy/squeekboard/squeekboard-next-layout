@@ -1,0 +1,6 @@
+#!/bin/sh
+# /usr/local/bin/squeekboard-next-layout (the keyboard's globe key, through a Hyprland binding on XF86Keyboard):
+# next Squeekboard language. Its own menu is a GTK popover that gets no touch on a layer surface.
+s=$(gsettings get org.gnome.desktop.input-sources sources)
+n=$(printf '%s' "$s" | python3 -c 'import ast,sys; l=ast.literal_eval(sys.stdin.read()); l=l[1:]+l[:1]; print(repr(l))')
+gsettings set org.gnome.desktop.input-sources sources "$n"

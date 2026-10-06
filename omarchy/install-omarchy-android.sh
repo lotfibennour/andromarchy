@@ -131,7 +131,7 @@ grep -q 'disable_watchdog_warning' ~/.config/hypr/input.lua ||
 # Ctrl/Super/Alt/AltGr/arrows (terminals too), a globe key for the layout list, Omarchy theme colours.
 SQ="$(dirname "$0")/squeekboard"
 pacman -S --noconfirm --needed squeekboard
-install -m755 "$SQ"/squeekboard "$SQ"/squeekboard-toggle "$SQ"/squeekboard-theme /usr/local/bin/
+install -m755 "$SQ"/squeekboard "$SQ"/squeekboard-toggle "$SQ"/squeekboard-theme "$SQ"/squeekboard-next-layout /usr/local/bin/
 for f in fr_wide fr terminal/fr_wide terminal/fr url/fr_wide url/fr email/fr_wide email/fr; do
   install -Dm644 "$SQ"/fr_wide.yaml ~/.local/share/squeekboard/keyboards/$f.yaml
 done
@@ -140,6 +140,12 @@ cp "$SQ"/plugin/* ~/.config/omarchy/plugins/andromarchy.squeekboard/
 printf '#!/bin/bash\n# Squeekboard follows the Omarchy theme\nsqueekboard-theme\n' > ~/.config/omarchy/hooks/theme-set.d/squeekboard
 chmod +x ~/.config/omarchy/hooks/theme-set.d/squeekboard
 install -m755 "$SQ"/squeekboard-session /usr/local/bin/
+# Globe key: XF86Keyboard -> next language (Squeekboard's own menu is a popover that gets no touch)
+grep -q 'squeekboard-next-layout' ~/.config/hypr/bindings.lua ||
+  printf '
+-- Android/Andromarchy: Squeekboard globe key -> next keyboard language
+o.bind("XF86Keyboard", "Next on-screen keyboard language", hl.dsp.exec_cmd("squeekboard-next-layout"))
+' >> ~/.config/hypr/bindings.lua
 grep -q 'squeekboard-session' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: Squeekboard (shows by itself in text fields; bar icon toggles it)\no.exec_on_start("squeekboard-session")\n' >> ~/.config/hypr/autostart.lua
 # Touchscreen gestures (hyprgrass, built by build-inside.sh): 3 fingers. HyperOS's own 3-finger gestures must be off

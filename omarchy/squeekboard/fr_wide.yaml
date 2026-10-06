@@ -37,7 +37,7 @@ buttons:
     Ctrl:      { modifier: "Control", label: "Ctrl", outline: wide }
     Super:     { modifier: "Mod4", label: "Super", outline: wide }
     Alt:       { modifier: "Alt", label: "Alt", outline: wide }
-    Lang:      { action: show_prefs, label: "🌐" }
+    Lang:      { keysym: "XF86Keyboard", label: "🌐" }
     space:     { keysym: "space", label: " ", outline: space }
     Up:        { keysym: "Up", label: "↑" }
     Down:      { keysym: "Down", label: "↓" }
