@@ -9,7 +9,7 @@
 #   check   (pacman PostTransaction hook) put back any protected file that was replaced or removed, then verify
 #           that every library our builds load can be found; report problems
 #
-# Protected: the paths in PATHS that exist at save time, plus every symlink among them (kept as links).
+# Protected: the paths in PATHS and in /opt/lotfix/protect/*.list that exist at save time (symlinks kept as links).
 import hashlib
 import os
 import shutil
@@ -50,10 +50,24 @@ def entry(path):
     return None
 
 
+def protected_paths():
+    """PATHS, plus every path listed in /opt/lotfix/protect/*.list (one per line, '#' comments): our builds'
+    install logs, e.g. Mesa's meson install-log.txt (73 files, 70 of them owned by the mesa packages)."""
+    paths = list(PATHS)
+    d = os.path.dirname(MANIFEST)
+    for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if name.endswith(".list"):
+            for line in open(os.path.join(d, name)):
+                line = line.strip()
+                if line.startswith("/") and line not in paths:
+                    paths.append(line)
+    return paths
+
+
 def save():
     os.makedirs(STORE, exist_ok=True)
     lines = []
-    for p in PATHS:
+    for p in protected_paths():
         e = entry(p)
         if e is None:
             continue

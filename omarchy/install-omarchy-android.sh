@@ -20,14 +20,14 @@ pacman -S --noconfirm --needed \
 
 rm -rf "$OMARCHY_PATH"
 cp -a "$SRC" "$OMARCHY_PATH"
-# A clone made on Windows has CRLF line endings, which break every omarchy-* script.
-grep -rlIZ $'\r' "$OMARCHY_PATH" | xargs -0 -r sed -i 's/\r$//' || true # none in a Linux clone: grep exits 1
-# ttfx comes from the x86-only Omarchy repo; without it the screensaver loops on "command not found".
-sed -i '/^trap exit_screensaver/a command -v ttfx >/dev/null || exit_screensaver' "$OMARCHY_PATH/bin/omarchy-screensaver"
-# ...and the idle service's launcher would still open its full-screen terminal for that instant exit: a black blink
-# every idle period. Don't launch it at all.
-sed -i '0,/^pgrep -f .\[o\]rg.omarchy.screensaver/s//# Android\/ARM: no ttfx, no screensaver (its window opened and closed at once: a black blink)\ncommand -v ttfx >\/dev\/null || exit 0\n&/' \
-  "$OMARCHY_PATH/bin/omarchy-launch-screensaver"
+# Our changes to Omarchy's own files, also re-applied after every omarchy-update (post-update hook).
+install -Dm 755 "$(dirname "$0")/../native/omarchy-dns-android.sh" /usr/local/share/andromarchy/omarchy-dns
+install -m 755 "$(dirname "$0")/omarchy-android-patches.sh" /usr/local/bin/omarchy-android-patches
+omarchy-android-patches
+mkdir -p ~/.config/omarchy/hooks/post-update.d
+printf '#!/bin/bash\n# Andromarchy: re-apply our changes to Omarchy after its update\nomarchy-android-patches\n' \
+  > ~/.config/omarchy/hooks/post-update.d/andromarchy
+chmod +x ~/.config/omarchy/hooks/post-update.d/andromarchy
 
 # No journald on Android: omarchy-launch-shell runs the shell through systemd-cat.
 cat > /usr/local/bin/systemd-cat <<'EOF'
@@ -80,30 +80,7 @@ EOF
 chmod 755 /usr/local/bin/systemd-run
 chmod +x /usr/local/bin/systemd-cat
 
-# The app's display (Hyprland output ANLAND-1) is the built-in panel: Omarchy recognises one by its connector name
-# (eDP/LVDS/DSI), e.g. for the brightness keys and the monitor panel's slider.
-grep -rl 'eDP|LVDS|DSI)' "$OMARCHY_PATH"/bin "$OMARCHY_PATH"/shell | xargs -r sed -i 's/(eDP|LVDS|DSI)/(eDP|LVDS|DSI|ANLAND)/g'
 pacman -S --noconfirm --needed brightnessctl
-
-# First run (omarchy-provision-first-run, each login until every step succeeds): its user units are hardware ones
-# (Bluetooth agent, sleep lock, monitor recovery, fcitx5, crash watch) that a normal install copies in; enabling them
-# here always failed, so first-run retried, and its welcome notifications piled up, at every start. Nothing to enable.
-printf '#!/bin/bash\n# Android/Andromarchy: no hardware user units to enable (see install-omarchy-android.sh)\nexit 0\n' \
-  > "$OMARCHY_PATH/install/user/first-run/enable-user-units.sh"
-# Its welcome notification also points to the Android apps.
-sed -i 's|Super + Space for Omarchy Menu\.'"'"'|Super + Space for Omarchy Menu.\\nApps > Mobile Apps: your Android apps.'"'"'|' \
-  "$OMARCHY_PATH/install/user/first-run/welcome.sh"
-
-# Apps menu: submenus (Mobile Apps, written by the app as apps.mobile) before the applications; Omarchy sorts the
-# whole list alphabetically.
-grep -q 'Andromarchy: submenus first' "$OMARCHY_PATH"/shell/plugins/menu/Menu.qml ||
-  sed -i '/if (active === "apps") {/{n;s|$|\n          if ((a.kind === "app") !== (b.kind === "app")) return a.kind === "app" ? 1 : -1 // Andromarchy: submenus first|}' \
-    "$OMARCHY_PATH"/shell/plugins/menu/Menu.qml
-
-# DNS provider (network panel): no NetworkManager/systemd-resolved here; the rootfs's /etc/resolv.conf is written
-# directly (native/omarchy-dns-android.sh). Omarchy's own kept as omarchy-dns.orig.
-cp -a "$OMARCHY_PATH/bin/omarchy-dns" "$OMARCHY_PATH/bin/omarchy-dns.orig"
-install -m 755 "$(dirname "$0")/../native/omarchy-dns-android.sh" "$OMARCHY_PATH/bin/omarchy-dns"
 
 # User config, same layout as Omarchy's install (config/ -> ~/.config).
 mkdir -p ~/.config

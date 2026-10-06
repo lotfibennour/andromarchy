@@ -162,6 +162,7 @@ pacman -S --noconfirm --needed llvm clang libclc spirv-llvm-translator glslang c
 git clone -q -b test/add-va-bridge https://github.com/lfdevs/mesa-for-android-container /tmp/mesa-src
 git -C /tmp/mesa-src checkout -q ef25369b9c
 (cd /tmp/mesa-src && meson setup build --prefix=/usr --buildtype=release -Dplatforms=x11,wayland   -Dgallium-drivers=freedreno,zink,virgl,llvmpipe -Dgallium-va=enabled -Dgallium-rusticl=false -Dvulkan-drivers=freedreno   -Dfreedreno-kmds=kgsl -Dvulkan-layers= -Dgles1=disabled -Dgles2=enabled -Dglx=dri -Degl=enabled -Dvalgrind=disabled   -Dlibunwind=disabled -Dtools= -Dvideo-codecs=all && ninja -C build && ninja -C build install)
+mkdir -p /opt/lotfix/protect && cp /tmp/mesa-src/build/meson-logs/install-log.txt /opt/lotfix/protect/mesa.list
 rm -rf /tmp/mesa-src
 
 # XWayland with GPU acceleration without /dev/dri (glamor + DRI3 on KGSL surfaceless): lfdevs's patches
