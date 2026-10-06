@@ -37,10 +37,66 @@ index cc5df3d..80bdb9b 100644
      }};
  
 diff --git i/src/layout.rs w/src/layout.rs
-index 75a5c94..98b8790 100644
+index 75a5c94..824e24d 100644
 --- i/src/layout.rs
 +++ w/src/layout.rs
-@@ -1246,6 +1246,15 @@ mod seat {
+@@ -1094,6 +1094,12 @@ pub struct UIBackend {
+ mod seat {
+     use super::*;
+ 
++    thread_local! {
++        /// Andromarchy sticky modifiers: (locked ones, last modifier tap and its time in ms)
++        static STICKY: std::cell::RefCell<(Vec<crate::action::Modifier>, Option<(crate::action::Modifier, u32)>)> =
++            std::cell::RefCell::new((Vec::new(), None));
++    }
++
+     fn handle_press_key_cleaner(
+         shape: &LayoutData,
+         submission: &mut Submission,
+@@ -1234,6 +1240,14 @@ mod seat {
+         manager: Option<(&actors::popover::State, receiver::State)>,
+         button_pos: &ButtonPosition,
+     ) {
++        // Andromarchy: sticky modifiers, like a hardware keyboard's chords (Omarchy's Super+Shift+F...): a tap on
++        // Ctrl/Alt/Super holds it until the next key, a double tap locks it, a tap on a locked one releases it.
++        let pressed = layout.shape.get_button(button_pos).map(|b| b.action.clone());
++        let tapped_modifier = match &pressed {
++            Some(Action::ApplyModifier(m)) if *m != crate::action::Modifier::Shift => Some(*m),
++            _ => None,
++        };
++        let was_active = tapped_modifier.map(|m| submission.is_modifier_active(m)).unwrap_or(false);
+         // Send events
+         let action = handle_release_key_cleaner(
+             &layout.shape,
+@@ -1243,9 +1257,43 @@ mod seat {
+             manager,
+             button_pos,
+         );
++        if let Some(m) = tapped_modifier {
++            STICKY.with(|st| {
++                let mut st = st.borrow_mut();
++                let (locked, last) = &mut *st;
++                if was_active {
++                    let double = matches!(last, Some((lm, t)) if *lm == m && time.0.wrapping_sub(*t) < 400);
++                    if locked.contains(&m) {
++                        locked.retain(|x| *x != m); // released (the cleaner just dropped it)
++                    } else if double {
++                        submission.handle_add_modifier(button_pos.into(), m, time); // keep it: locked
++                        locked.push(m);
++                    }
++                }
++                *last = Some((m, time.0));
++            });
++        } else if let Some(Action::Submit { .. }) | Some(Action::Erase) = &pressed {
++            STICKY.with(|st| {
++                let locked = &st.borrow().0;
++                for m in [crate::action::Modifier::Control, crate::action::Modifier::Alt, crate::action::Modifier::Mod4] {
++                    if submission.is_modifier_active(m) && !locked.contains(&m) {
++                        submission.handle_drop_modifier(button_pos.into(), m, time);
++                    }
++                }
++            });
++        }
          
          // Apply state changes
          layout.apply_view_transition(&action);
