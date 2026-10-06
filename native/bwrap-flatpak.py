@@ -93,6 +93,12 @@ def real(guest):
     return ROOTFS + guest
 
 
+def canon(p):
+    """Android names the app's data twice: /data/data/<pkg> and /data/user/0/<pkg> (a link). One form to compare."""
+    p = os.path.normpath(p)
+    return "/data/user/0/" + p[len("/data/data/"):] if p.startswith("/data/data/") else p
+
+
 class Tree:
     def __init__(self, path):
         self.path = path  # guest path of the tree root
@@ -137,6 +143,7 @@ class Tree:
                     nxt = dest  # a link of the tree itself (/lib -> usr/lib): follow it
                     hops += 1
                     continue
+                debug(f"bwrap: mirror {nxt} for {cpath}")
                 self.mirror(nxt)  # a bound host directory: give the tree its own copy of the level
                 break
             if not os.path.lexists(nxt):
@@ -151,12 +158,45 @@ class Tree:
         elif os.path.isdir(p):
             shutil.rmtree(p)
 
+    def host_of(self, cpath):
+        """The real host path a container path reaches through a bind link among its parents, or None."""
+        parts = [p for p in cpath.split("/") if p and p != "."]
+        cur = self.path
+        for i, name in enumerate(parts):
+            nxt = os.path.join(cur, name)
+            hops = 0
+            while os.path.islink(nxt) and hops < 16:
+                t = os.readlink(nxt)
+                if t.startswith("/") and not (t == self.path or t.startswith(self.path + "/")):
+                    return os.path.normpath(os.path.join(real(t), *parts[i + 1:]))  # a bind: host path from here
+                nxt = os.path.normpath(os.path.join(cur, t))
+                hops += 1
+            if not os.path.isdir(nxt):
+                return None
+            cur = nxt
+        return None
+
     def bind(self, src, dest):
         src, dest = os.path.normpath(src), os.path.normpath(dest)
         if any(dest == e or dest.startswith(e + "/") for e in self.excluded):
             return  # passed through as is
         if dest == "/usr":
             self.usr_source = src
+        # Under a bound host directory (the home folder for filesystems=home), don't copy that level into the tree:
+        # what the app then created there (Zotero's library, ~/Zotero) stayed in the temporary tree and was lost.
+        host = self.host_of(dest)
+        if host is not None:
+            if canon(host) == canon(real(src)):
+                return  # the same place already (~/.var/app/<id> onto itself)
+            private = os.path.normpath(real(os.path.expanduser("~/.var/app")))
+            if canon(host).startswith(canon(private) + "/"):  # the app's own data: the link goes there, as a bind would
+                rf = canon(ROOTFS)
+                g = canon(host)[len(rf):] if canon(host).startswith(rf + "/") else host
+                if not os.path.lexists(g):
+                    os.makedirs(os.path.dirname(g), exist_ok=True)
+                    raw_symlink(real(src), g)
+                debug(f"bwrap: bind {src} -> {dest} in place: {g}")
+                return
         p = self.place(dest)
         self.clear(p)
         raw_symlink(real(src), p)  # absolute host path: "/data" is passed through inside the container
@@ -180,6 +220,20 @@ class Tree:
     def directory(self, dest, mode, empty=False):
         if any(os.path.normpath(dest) == e for e in self.excluded):
             os.makedirs(self.here(dest), exist_ok=True)
+            return
+        host = self.host_of(dest)
+        if host is not None and empty:
+            # A mask (--tmpfs) over part of a bound host directory: Flatpak hides ~/.local/share/flatpak and
+            # ~/.var/app from apps that see the home folder. It cannot be done in place (that would hide or empty the
+            # real folders), and copying the home folder into the tree lost what the app created there. No isolation
+            # here anyway: skip it.
+            debug(f"bwrap: mask {dest} skipped (inside {host})")
+            return
+        if host is not None:  # under a bound host directory (~/.var/app/<id>/cache...): there, not a tree copy
+            rf = canon(ROOTFS)
+            g = canon(host)[len(rf):] if canon(host).startswith(rf + "/") else host
+            os.makedirs(g, exist_ok=True)
+            debug(f"bwrap: dir {dest} in place: {g}")
             return
         p = self.place(dest)
         if empty:  # --tmpfs masks whatever was there
@@ -235,6 +289,29 @@ def runtime_glibc(tree):
 
 HOST_GL = "/opt/lotfix/host-gl"
 SPAWN_DIR = "/usr/local/libexec/andromarchy-flatpak"  # flatpak-spawn for inside the sandboxes (native/flatpak-spawn.sh)
+
+
+GECKO_PREFS = ('user_pref("gfx.webrender.all", true);\n'
+               'user_pref("layers.acceleration.force-enabled", true);\n')
+
+
+def gecko_gpu_prefs():
+    """Firefox-based apps (Zotero, Thunderbird, Firefox, LibreWolf) test the GPU themselves and reject ours (no PCI
+    device, Mesa reports "not accelerated"): WebRender fell back to software. Every Gecko profile (a directory with
+    prefs.js) gets the prefs that force it on, in its user.js: under ~/.var/app for confined apps, and in the home
+    folder's own profile directories for apps that see it (Zotero: ~/.zotero)."""
+    for base in [os.path.expanduser(d) for d in ("~/.var/app", "~/.zotero", "~/.mozilla", "~/.thunderbird",
+                                                  "~/.librewolf")]:
+        for root, dirs, files in os.walk(base) if os.path.isdir(base) else []:
+            if root.count(os.sep) - base.count(os.sep) > 5:
+                dirs[:] = []
+                continue
+            if "prefs.js" in files:
+                user = os.path.join(root, "user.js")
+                text = open(user).read() if os.path.exists(user) else ""
+                if "gfx.webrender.all" not in text:
+                    with open(user, "a") as f:
+                        f.write(("\n" if text and not text.endswith("\n") else "") + GECKO_PREFS)
 
 
 def host_gl():
@@ -389,6 +466,10 @@ def main():
             # Our KGSL Mesa reports MESA_query_renderer "accelerated" = false (no DRM device behind it): Firefox-based
             # apps (Zotero, Thunderbird) read that as software and turn GPU rendering off. Force it.
             env.setdefault("MOZ_ACCELERATED", "1")
+            try:
+                gecko_gpu_prefs()
+            except OSError:
+                pass
         compat = real("/opt/lotfix/android-compat.so")
         fc = real("/usr/lib/libfakeroot/fakechroot/libfakechroot.so")
         for k in ("ANDROMARCHY", "ANDROMARCHY_NO_DRM_DEVICE", "TURNIP_KMD", "FD_FORCE_KGSL", "MESA_LOADER_DRIVER_OVERRIDE",
@@ -451,4 +532,5 @@ def main():
             shutil.rmtree(tree.path, ignore_errors=True)
 
 
-main()
+if __name__ == "__main__":
+    main()
