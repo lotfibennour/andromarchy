@@ -6,3 +6,4 @@
 *.conf text eol=lf
 *.patch -text
 *.lua text eol=lf
+*.yaml text eol=lf

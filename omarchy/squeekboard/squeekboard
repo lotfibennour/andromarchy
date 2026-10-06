@@ -1,0 +1,5 @@
+#!/bin/sh
+# /usr/local/bin/squeekboard (before /usr/bin in PATH): Squeekboard with the Omarchy theme. Its style is bundled
+# in the binary (GResource) and applied on its own style contexts, so gtk.css cannot reach it; GLib's resource
+# overlay replaces style.css with the one squeekboard-theme writes.
+exec env G_RESOURCE_OVERLAYS="/sm/puri/squeekboard=$HOME/.local/share/squeekboard/theme" /usr/bin/squeekboard "$@"

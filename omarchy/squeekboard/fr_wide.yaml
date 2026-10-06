@@ -11,19 +11,19 @@ views:
         - 'Tab a z e r t y u i o p ^ $ Return'
         - 'Caps q s d f g h j k l m ù *'
         - 'Shift < w x c v b n , ; : ! Up'
-        - 'Ctrl Super Alt space AltGr Left Down Right'
+        - 'Ctrl Super Alt Lang space AltGr Left Down Right'
     upper:
         - 'Esc 1 2 3 4 5 6 7 8 9 0 ° + BackSpace'
         - 'Tab A Z E R T Y U I O P ¨ £ Return'
         - 'Caps Q S D F G H J K L M % µ'
         - 'Shift > W X C V B N ? . / § Up'
-        - 'Ctrl Super Alt space AltGr Left Down Right'
+        - 'Ctrl Super Alt Lang space AltGr Left Down Right'
     altgr:
         - 'Esc ~ # { [ | ` \ @ ] } € BackSpace'
         - 'Tab F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12'
         - 'Caps â ê î ô û ë ï ü œ æ « »'
         - 'Shift Home End PgUp PgDn Del Ins … – ± Up'
-        - 'Ctrl Super Alt space AltGr Left Down Right'
+        - 'Ctrl Super Alt Lang space AltGr Left Down Right'
 
 buttons:
     quot:      { text: '"' }
@@ -37,6 +37,7 @@ buttons:
     Ctrl:      { modifier: "Control", label: "Ctrl", outline: wide }
     Super:     { modifier: "Mod4", label: "Super", outline: wide }
     Alt:       { modifier: "Alt", label: "Alt", outline: wide }
+    Lang:      { action: show_prefs, label: "🌐" }
     space:     { keysym: "space", label: " ", outline: space }
     Up:        { keysym: "Up", label: "↑" }
     Down:      { keysym: "Down", label: "↓" }

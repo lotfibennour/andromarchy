@@ -1,0 +1,19 @@
+#!/bin/sh
+# /usr/local/bin/squeekboard-theme: Squeekboard's style.css from the current Omarchy theme (run by the theme-set
+# hook and at session start), then restarts Squeekboard so it takes the new colours.
+c=~/.local/state/omarchy/current/theme/colors.toml
+[ -f "$c" ] || exit 0
+get() { sed -n "s/^$1 *= *\"\(#[0-9a-fA-F]*\)\".*/\1/p" "$c" | head -1; }
+bg=$(get dark_background); key=$(get lighter_background); fg=$(get foreground); acc=$(get accent); sel=$(get selection)
+# Read by the squeekboard wrapper through a GResource overlay (both names: default and dark GTK theme).
+t=~/.local/share/squeekboard/theme
+mkdir -p $t
+cat > $t/style.css <<CSS
+sq_view, sq_view.background { background-color: ${bg:-#1e1e1e}; color: ${fg:-#ffffff}; font-family: "JetBrainsMono Nerd Font", sans-serif; }
+sq_view sq_button { background-color: ${key:-#333333}; color: ${fg:-#ffffff}; border-radius: 6px; margin: 2px; }
+sq_view sq_button.wide, sq_view sq_button.altline { background-color: ${sel:-#444444}; }
+sq_view sq_button:active, sq_view sq_button.locked { background-color: ${acc:-#3584e4}; color: ${bg:-#000000}; }
+sq_button.latched { background-color: ${acc:-#3584e4}; color: ${bg:-#000000}; }
+CSS
+cp $t/style.css "$t/style-Adwaita:dark.css"
+if pgrep -x squeekboard >/dev/null; then pkill -x squeekboard; sleep 0.5; squeekboard >/dev/null 2>&1 & fi

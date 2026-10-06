@@ -126,50 +126,33 @@ grep -q 'resolve_binds_by_sym' ~/.config/hypr/input.lua ||
 grep -q 'disable_watchdog_warning' ~/.config/hypr/input.lua ||
   printf '\n-- Android/Andromarchy: started by the app (SessionService), not start-hyprland\nhl.config({ misc = { disable_watchdog_warning = true } })\n' >> ~/.config/hypr/input.lua
 
-# On-screen keyboard by default (abdxdev/omarchy-onscreen-keyboard, MIT): a bar plugin that types through wtype
-# (Wayland virtual keyboard), so it reaches every app with accents too. Pinned commit.
-OSK_ID=io.github.abdxdev.onscreen-keyboard
-OSK_REV=0d42cadf48729ed2badfeee24163be7e740ec042
-pacman -S --noconfirm --needed wtype
-if [ ! -d ~/.config/omarchy/plugins/$OSK_ID ]; then
-  mkdir -p ~/.config/omarchy/plugins
-  git clone -q https://github.com/abdxdev/omarchy-onscreen-keyboard.git ~/.config/omarchy/plugins/$OSK_ID
-  git -C ~/.config/omarchy/plugins/$OSK_ID checkout -q $OSK_REV
-  # Modifier combos with an ASCII symbol (Super+Space: Omarchy menu) passed the character to `wtype -k`, which
-  # wants a keysym name. Use the plugin's own name table for them.
-  sed -i 's|    if (codePoint < 0x80) return text|    if (/^[A-Za-z0-9]$/.test(text)) return text\n    // Other ASCII (space, punctuation) needs its keysym name for wtype -k (Andromarchy fix)\n    for (var name in tokenCharMap)\n        if (tokenCharMap[name] === text) return name|' \
-    ~/.config/omarchy/plugins/$OSK_ID/KeyboardLayout.js
-  # The space bar typed " " as text (wtype --): apps took it for a special key. Send the space key instead.
-  sed -i 's|^        sendKeys(Layout.buildTypeCommand(text))$|        // Andromarchy: space as the "space" key (typed as text, apps saw a special key)\n        sendKeys(text === " " ? Layout.buildKeyCommand("space") : Layout.buildTypeCommand(text))|' \
-    ~/.config/omarchy/plugins/$OSK_ID/Keyboard.qml
-  # Languages: wtype types any character itself, so the language key only changes the on-screen layout and leaves
-  # the system one (physical keyboard) alone. All keysym names -> characters (Arabic, French accents...).
-  sed -i 's|^        Quickshell.execDetached(\["hyprctl", "switchxkblayout", "all", "next"\])$|        // Andromarchy: wtype types characters itself; keep the system layout (physical keyboard) as is|' \
-    ~/.config/omarchy/plugins/$OSK_ID/Keyboard.qml
-  bash "$(dirname "$0")/osk-keysyms.sh" ~/.config/omarchy/plugins/$OSK_ID
-fi
-# On-screen keyboard languages, read by the plugin from kb_layout (the system layout stays the first one).
-grep -q 'kb_layout = "us,fr,ara"' ~/.config/hypr/input.lua ||
-  printf '\n-- Android/Andromarchy: on-screen keyboard languages (the system layout stays the first one)\nhl.config({ input = { kb_layout = "us,fr,ara" } })\n' >> ~/.config/hypr/input.lua
-# Shown automatically when a text field gets focus, hidden while a physical keyboard is connected (osk-autoshow,
-# built into /usr/local/bin by build-inside.sh). Started with Hyprland.
-grep -q 'osk-autoshow' ~/.config/hypr/autostart.lua ||
-  printf '\n-- Android/Andromarchy: on-screen keyboard follows text-field focus\no.exec_on_start("osk-autoshow")\n' >> ~/.config/hypr/autostart.lua
+# On-screen keyboard: Squeekboard (Phosh's, Arch package). It shows by itself when a text field gets focus
+# (input-method-v2); the bar icon (plugin andromarchy.squeekboard) toggles it. PC-style AZERTY layout with
+# Ctrl/Super/Alt/AltGr/arrows (terminals too), a globe key for the layout list, Omarchy theme colours.
+SQ="$(dirname "$0")/squeekboard"
+pacman -S --noconfirm --needed squeekboard
+install -m755 "$SQ"/squeekboard "$SQ"/squeekboard-toggle "$SQ"/squeekboard-theme /usr/local/bin/
+for f in fr_wide fr terminal/fr_wide terminal/fr; do
+  install -Dm644 "$SQ"/fr_wide.yaml ~/.local/share/squeekboard/keyboards/$f.yaml
+done
+mkdir -p ~/.config/omarchy/plugins/andromarchy.squeekboard ~/.config/omarchy/hooks/theme-set.d
+cp "$SQ"/plugin/* ~/.config/omarchy/plugins/andromarchy.squeekboard/
+printf '#!/bin/bash\n# Squeekboard follows the Omarchy theme\nsqueekboard-theme\n' > ~/.config/omarchy/hooks/theme-set.d/squeekboard
+chmod +x ~/.config/omarchy/hooks/theme-set.d/squeekboard
+install -m755 "$SQ"/squeekboard-session /usr/local/bin/
+grep -q 'squeekboard-session' ~/.config/hypr/autostart.lua ||
+  printf '\n-- Android/Andromarchy: Squeekboard (shows by itself in text fields; bar icon toggles it)\no.exec_on_start("squeekboard-session")\n' >> ~/.config/hypr/autostart.lua
 # Touchscreen gestures (hyprgrass, built by build-inside.sh): 3 fingers. HyperOS's own 3-finger gestures must be off
 # (docs/device-setup.md).
 install -Dm644 "$(dirname "$0")/touch.lua" ~/.config/hypr/touch.lua
 grep -q 'require("hypr.touch")' ~/.config/hypr/hyprland.lua ||
-  sed -i 's/^require("hypr.autostart")$/require("hypr.autostart")
-require("hypr.touch")/' ~/.config/hypr/hyprland.lua
+  sed -i 's/^require("hypr.autostart")$/require("hypr.autostart")\nrequire("hypr.touch")/' ~/.config/hypr/hyprland.lua
 grep -q 'libhyprgrass' ~/.config/hypr/autostart.lua ||
-  printf '
--- Android/Andromarchy: touchscreen gestures
-o.exec_on_start("hyprctl plugin load /usr/lib/hyprland-plugins/libhyprgrass.so && hyprctl reload")
-' >> ~/.config/hypr/autostart.lua
+  printf '\n-- Android/Andromarchy: touchscreen gestures\no.exec_on_start("hyprctl plugin load /usr/lib/hyprland-plugins/libhyprgrass.so && hyprctl reload")\n' >> ~/.config/hypr/autostart.lua
 # Omarchy's first-run steps that need the session (dark GTK theme, primary paste, welcome notification), once.
 grep -q 'first-session.sh' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: first session (once)\no.exec_on_start("/opt/lotfix/first-session.sh")\n' >> ~/.config/hypr/autostart.lua
-"$OMARCHY_PATH"/bin/omarchy-plugin-enable $OSK_ID || echo "on-screen keyboard: enable it with 'omarchy plugin enable $OSK_ID'"
+"$OMARCHY_PATH"/bin/omarchy-plugin-enable andromarchy.squeekboard || echo "on-screen keyboard: enable it with 'omarchy plugin enable andromarchy.squeekboard'"
 
 # kitty: spawn bash directly. Its default (kitten run-shell + shell integration) works only partly without proot.
 grep -q '^shell /usr/bin/bash' ~/.config/kitty/kitty.conf 2>/dev/null ||

@@ -36,7 +36,7 @@ pacman -U --noconfirm /tmp/mesa/*.pkg.tar.*
 pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
   base-devel git cmake ninja pkgconf python autoconf automake libtool po4a \
   hyprland hyprwayland-scanner wayland-protocols glaze cli11 hwdata libdisplay-info libinput seatd pixman \
-  fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl gnome-keyring libsecret flatpak gnome-software nautilus \
+  fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl gnome-keyring libsecret flatpak gnome-software nautilus squeekboard \
   mesa-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc glm meson
 
 
@@ -135,10 +135,6 @@ curl -fsSL -o /tmp/yay.tgz https://github.com/Jguer/yay/releases/download/v13.0.
 echo "75bc500c8677d6760f51117ae0a61689e9cf165bea3c4800825a5c879d030726  /tmp/yay.tgz" | sha256sum -c --quiet
 tar xzf /tmp/yay.tgz -C /tmp && install -m 755 /tmp/yay_13.0.1_aarch64/yay /usr/local/bin/yay && rm -rf /tmp/yay*
 
-# On-screen keyboard follows text-field focus (Omarchy autostart runs it): a minimal input-method-v2 client.
-(cd /tmp && wayland-scanner client-header $L/native/input-method-unstable-v2.xml input-method-unstable-v2-client-protocol.h &&
-  wayland-scanner private-code $L/native/input-method-unstable-v2.xml input-method-unstable-v2-protocol.c &&
-  gcc -O2 -I/tmp -o /usr/local/bin/osk-autoshow $L/native/osk-autoshow.c input-method-unstable-v2-protocol.c -lwayland-client)
 # wtype (the on-screen keyboard's typing tool) with standard keys on their real evdev codes: Chromium/Electron read
 # the physical code, and stock wtype's space arrived as code 1 = Escape.
 rm -rf /tmp/wtype && git clone -q https://github.com/atx/wtype /tmp/wtype && git -C /tmp/wtype checkout -q v0.4 &&

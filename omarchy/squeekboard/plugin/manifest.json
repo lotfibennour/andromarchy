@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "andromarchy.squeekboard",
+  "name": "Squeekboard",
+  "version": "1.0.0",
+  "author": "Andromarchy",
+  "license": "MIT",
+  "description": "Bar icon that shows or hides Squeekboard, the on-screen keyboard (it also shows by itself in text fields).",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "On-Screen Keyboard",
+    "description": "Shows or hides Squeekboard",
+    "category": "Widgets",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

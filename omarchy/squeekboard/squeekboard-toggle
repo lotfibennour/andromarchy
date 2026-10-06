@@ -1,0 +1,6 @@
+#!/bin/sh
+# /usr/local/bin/squeekboard-toggle: show/hide Squeekboard (bar icon). Starts it if it is not running.
+pgrep -x squeekboard >/dev/null || { squeekboard >/dev/null 2>&1 & sleep 1.5; }
+v=$(busctl --user get-property sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 Visible 2>/dev/null | cut -d' ' -f2)
+[ "$v" = true ] && v=false || v=true
+busctl --user call sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 SetVisible b $v

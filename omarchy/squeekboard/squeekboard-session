@@ -1,0 +1,7 @@
+#!/bin/sh
+# /usr/local/bin/squeekboard-session (Hyprland autostart): Squeekboard enabled, its layouts (fr, us, ara) and the
+# Omarchy theme colours, then the keyboard itself.
+gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled true
+gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'fr'), ('xkb', 'us'), ('xkb', 'ara')]"
+squeekboard-theme
+exec squeekboard
