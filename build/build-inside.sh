@@ -155,14 +155,17 @@ gcc -O2 -shared -fPIC -o /opt/lotfix/android-compat.so $L/native/android-compat.
 # glibc reads locales internally from LOCPATH, which ignores locale-archive: one directory per locale.
 localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8
 
-# Protection of our own builds across pacman transactions (native/andromarchy-protect.py): our Mesa's LLVM as a
-# private copy (Arch moves on: llvm-libs 23 removed libLLVM.so.22.1 and the session did not start), then a record
-# of every protected file; the hook puts them back after any install/upgrade/removal.
-mkdir -p /opt/lotfix/lib
-if [ ! -L /usr/lib/libLLVM.so.22.1 ]; then
-  [ -f /usr/lib/libLLVM.so.22.1 ] || { echo "our Mesa needs libLLVM.so.22.1 (llvm-libs 22), not in the repo anymore"; exit 1; }
-  mv /usr/lib/libLLVM.so.22.1 /opt/lotfix/lib/ && ln -s ../../opt/lotfix/lib/libLLVM.so.22.1 /usr/lib/libLLVM.so.22.1
-fi
+# Our Mesa (KGSL + termux-va VA bridge), built here against the repo's current LLVM: the prebuilt packages above
+# only provide pacman's view of "mesa" (dependencies); their libraries are replaced by this build. A prebuilt Mesa
+# pinned an LLVM that Arch dropped (llvm-libs 23 removed libLLVM.so.22.1: the session did not start).
+pacman -S --noconfirm --needed llvm clang libclc spirv-llvm-translator glslang cbindgen python-mako python-yaml   python-packaging python-ply byacc bison flex libva wayland-protocols libxrandr libxshmfence libxxf86vm libglvnd
+git clone -q -b test/add-va-bridge https://github.com/lfdevs/mesa-for-android-container /tmp/mesa-src
+git -C /tmp/mesa-src checkout -q ef25369b9c
+(cd /tmp/mesa-src && meson setup build --prefix=/usr --buildtype=release -Dplatforms=x11,wayland   -Dgallium-drivers=freedreno,zink,virgl,llvmpipe -Dgallium-va=enabled -Dgallium-rusticl=false -Dvulkan-drivers=freedreno   -Dfreedreno-kmds=kgsl -Dvulkan-layers= -Dgles1=disabled -Dgles2=enabled -Dglx=dri -Degl=enabled -Dvalgrind=disabled   -Dlibunwind=disabled -Dtools= -Dvideo-codecs=all && ninja -C build && ninja -C build install)
+rm -rf /tmp/mesa-src
+
+# Protection of our own builds across pacman transactions (native/andromarchy-protect.py): a record of every
+# protected file; the hook puts them back after any install/upgrade/removal.
 install -m 755 $L/native/andromarchy-protect.py /usr/local/bin/andromarchy-protect
 install -m 755 $L/native/android-clipboard.sh /usr/local/bin/android-clipboard
 install -Dm 644 $L/native/zz-andromarchy-protect.hook /etc/pacman.d/hooks/zz-andromarchy-protect.hook

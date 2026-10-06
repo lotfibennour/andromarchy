@@ -2,7 +2,7 @@
 # /usr/local/bin/andromarchy-protect: keeps Andromarchy's own builds in place across pacman transactions.
 #
 # Our Mesa (KGSL), Hyprland and aquamarine (Anland backend) replace files that belong to Arch packages, and our Mesa
-# needs a library (LLVM 22) that Arch may move on from. An update, an app install pulling a dependency, or a full
+# is built against the repo's LLVM, which a partial update may move ahead of it. An update, an app install pulling a dependency, or a full
 # -Syu could overwrite or remove them: the session would not start (black screen).
 #
 #   save    record the current version of every protected file (copy in /opt/lotfix/protect/store)
@@ -24,8 +24,6 @@ PATHS = [
     "/usr/lib/dri/libdril_dri.so", "/usr/lib/gbm/dri_gbm.so", "/usr/lib/libvulkan_freedreno.so",
     "/usr/lib/libgallium-26.3.0-devel.so", "/usr/lib/dri/termuxva_drv_video.so",
     "/usr/lib/libtva_drm_shim_wayland.so",
-    # its LLVM (a private copy in /opt/lotfix/lib, linked into /usr/lib)
-    "/usr/lib/libLLVM.so.22.1",
     # Hyprland + aquamarine with our patches
     "/usr/bin/Hyprland", "/usr/bin/hyprctl", "/usr/bin/start-hyprland", "/usr/lib/libaquamarine.so.0.15.1",
 ]
