@@ -1028,6 +1028,20 @@ static int ostree_object_link(int olddirfd, const char *old, int newdirfd, const
     // only the content (files/: nearly all the volume); Flatpak opens metadata and export/ with O_NOFOLLOW
     if (!repo || !strstr(o, "/flatpak/") || !strstr(nw, "/files/"))
         return -1;
+    // Only data (translations, icons, themes...): programs, libraries and scripts locate themselves from their own
+    // path ($ORIGIN, readlink -f "$0"), which through a link is the repo's objects directory (Zotero's launcher,
+    // gnome-calculator's libraries). Executable or ELF: a copy, as before.
+    struct stat st;
+    if (stat(o, &st) != 0 || (st.st_mode & 0111))
+        return -1;
+    char magic[4] = {0};
+    int fd = open(o, O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return -1;
+    ssize_t got = read(fd, magic, 4);
+    close(fd);
+    if (got == 4 && memcmp(magic, "\177ELF", 4) == 0)
+        return -1;
     // relative path from the new link's directory to the object: up from their common prefix
     size_t common = 0;
     for (size_t i = 0; o[i] && o[i] == nw[i]; i++)
