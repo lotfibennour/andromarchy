@@ -32,8 +32,8 @@ buttons:
     BackSpace: { action: erase, icon: "edit-clear-symbolic", outline: wide }
     Return:    { keysym: "Return", icon: "key-enter", outline: wide }
     Caps:      { action: { locking: { lock_view: "upper", unlock_view: "base", looks_locked_from: [] } }, label: "Caps", outline: wide }
-    Shift:     { action: { locking: { lock_view: "upper", unlock_view: "base" } }, icon: "key-shift", outline: wide }
-    AltGr:     { action: { locking: { lock_view: "altgr", unlock_view: "base" } }, label: "AltGr", outline: wide }
+    Shift:     { action: { locking: { lock_view: "upper", unlock_view: "base", pops: true } }, icon: "key-shift", outline: wide }
+    AltGr:     { action: { locking: { lock_view: "altgr", unlock_view: "base", pops: true } }, label: "AltGr", outline: wide }
     Ctrl:      { modifier: "Control", label: "Ctrl", outline: wide }
     Super:     { modifier: "Mod4", label: "Super", outline: wide }
     Alt:       { modifier: "Alt", label: "Alt", outline: wide }
