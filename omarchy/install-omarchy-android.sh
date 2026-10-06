@@ -132,9 +132,14 @@ grep -q 'disable_watchdog_warning' ~/.config/hypr/input.lua ||
 SQ="$(dirname "$0")/squeekboard"
 pacman -S --noconfirm --needed squeekboard
 install -m755 "$SQ"/squeekboard "$SQ"/squeekboard-toggle "$SQ"/squeekboard-theme "$SQ"/squeekboard-next-layout /usr/local/bin/
-for f in fr_wide fr terminal/fr_wide terminal/fr url/fr_wide url/fr email/fr_wide email/fr; do
-  install -Dm644 "$SQ"/fr_wide.yaml ~/.local/share/squeekboard/keyboards/$f.yaml
+# PC layouts (gen-layouts.py) for every field type; number/PIN fields exist only in English: the English PC one.
+K=~/.local/share/squeekboard/keyboards
+for l in fr us ara; do
+  for d in "" terminal/ url/ email/; do
+    install -Dm644 "$SQ"/${l}_wide.yaml $K/$d${l}_wide.yaml && install -Dm644 "$SQ"/${l}_wide.yaml $K/$d$l.yaml
+  done
 done
+for f in number/us_wide number/us pin/us_wide pin/us; do install -Dm644 "$SQ"/us_wide.yaml $K/$f.yaml; done
 mkdir -p ~/.config/omarchy/plugins/andromarchy.squeekboard ~/.config/omarchy/hooks/theme-set.d
 cp "$SQ"/plugin/* ~/.config/omarchy/plugins/andromarchy.squeekboard/
 printf '#!/bin/bash\n# Squeekboard follows the Omarchy theme\nsqueekboard-theme\n' > ~/.config/omarchy/hooks/theme-set.d/squeekboard
