@@ -80,6 +80,7 @@ done
 
 section "System"
 t "network (DNS + HTTPS)"           curl -fsS -o /dev/null --max-time 10 https://archlinux.org
+t "network state from Android (Wi-Fi name)" sh -c 'n=$(cat $XDG_RUNTIME_DIR/network); case $n in "wifi "*" "?*|wired) ;; *) exit 1;; esac'
 t "pacman database"                 pacman -Q pacman
 t "sudo (fake root)"                sudo true
 t "Go programs (gum)"               gum --version
