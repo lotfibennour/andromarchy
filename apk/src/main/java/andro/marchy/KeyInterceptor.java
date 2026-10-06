@@ -82,6 +82,7 @@ public class KeyInterceptor extends AccessibilityService {
 
     @Override
     protected void onServiceConnected() {
+        Prefs.init(this);
         super.onServiceConnected();
         self = this;
         recheck();

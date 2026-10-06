@@ -294,6 +294,7 @@ public class MainActivity extends Activity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Prefs.init(this); // settings defaults + move from the former file name
 
         // Andromarchy: this app is also the Linux side. Start the session (daemon, audio, Hyprland) if the Arch
         // rootfs is installed; this activity then connects to the daemon like the Termux version did.
