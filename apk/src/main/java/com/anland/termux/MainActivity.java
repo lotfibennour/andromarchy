@@ -326,6 +326,7 @@ public class MainActivity extends Activity
         surfaceView = new SurfaceView(this);
         surfaceView.setFocusable(true);
         surfaceView.setFocusableInTouchMode(true);
+        surfaceView.setOnDragListener(new DropTarget(this)); // Android drag and drop -> ~/Downloads / clipboard
         systemIme = new SystemIME(this, this);
 
         FrameLayout root = new FrameLayout(this) {
