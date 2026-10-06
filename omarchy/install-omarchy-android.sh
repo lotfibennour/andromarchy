@@ -159,8 +159,6 @@ grep -q 'osk-autoshow' ~/.config/hypr/autostart.lua ||
 # Omarchy's first-run steps that need the session (dark GTK theme, primary paste, welcome notification), once.
 grep -q 'first-session.sh' ~/.config/hypr/autostart.lua ||
   printf '\n-- Android/Andromarchy: first session (once)\no.exec_on_start("/opt/lotfix/first-session.sh")\n' >> ~/.config/hypr/autostart.lua
-grep -q 'andromarchy-longpress' ~/.config/hypr/autostart.lua ||
-  printf '\n-- Android/Andromarchy: edit menu on a long touch press\no.exec_on_start("andromarchy-longpress")\n' >> ~/.config/hypr/autostart.lua
 "$OMARCHY_PATH"/bin/omarchy-plugin-enable $OSK_ID || echo "on-screen keyboard: enable it with 'omarchy plugin enable $OSK_ID'"
 
 # kitty: spawn bash directly. Its default (kitten run-shell + shell integration) works only partly without proot.
