@@ -178,6 +178,7 @@ rm -rf /tmp/xwayland
 # protected file; the hook puts them back after any install/upgrade/removal.
 install -m 755 $L/native/andromarchy-protect.py /usr/local/bin/andromarchy-protect
 install -m 755 $L/native/android-clipboard.sh /usr/local/bin/android-clipboard
+install -m 755 $L/native/andromarchy-selftest.sh /usr/local/bin/andromarchy-selftest
 install -Dm 644 $L/native/zz-andromarchy-protect.hook /etc/pacman.d/hooks/zz-andromarchy-protect.hook
 andromarchy-protect save
 
