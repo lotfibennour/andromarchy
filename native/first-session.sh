@@ -15,5 +15,7 @@ flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/fl
 # Flathub's graphics drivers stay out (~1.8 GB): apps run on our Mesa (bwrap-flatpak.py's host_gl).
 flatpak --user mask 'org.freedesktop.Platform.GL.*'
 flatpak --user mask 'org.freedesktop.Platform.GL32.*'
+# Translations of Flatpak runtimes: the user's language and English only (GNOME's all-language one was 1.6 GB).
+flatpak --user config --set languages "${LANG%%_*};en"
 # (the welcome notification is Omarchy's own first run's: install-omarchy-android.sh adds the Mobile Apps line)
 mkdir -p "${mark%/*}" && touch "$mark"
