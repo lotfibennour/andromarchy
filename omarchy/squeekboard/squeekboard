@@ -2,4 +2,7 @@
 # /usr/local/bin/squeekboard (before /usr/bin in PATH): Squeekboard with the Omarchy theme. Its style is bundled
 # in the binary (GResource) and applied on its own style contexts, so gtk.css cannot reach it; GLib's resource
 # overlay replaces style.css with the one squeekboard-theme writes.
-exec env G_RESOURCE_OVERLAYS="/sm/puri/squeekboard=$HOME/.local/share/squeekboard/theme" /usr/bin/squeekboard "$@"
+# Our build (patches/squeekboard: overlay layer, above fullscreen windows) out of pacman's reach; Arch's otherwise.
+b=/opt/lotfix/squeekboard
+[ -x $b ] || b=/usr/bin/squeekboard
+exec env G_RESOURCE_OVERLAYS="/sm/puri/squeekboard=$HOME/.local/share/squeekboard/theme" $b "$@"

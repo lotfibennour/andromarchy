@@ -1,0 +1,34 @@
+diff --git i/src/panel.c w/src/panel.c
+index a9942c8..18f02d8 100644
+--- i/src/panel.c
++++ w/src/panel.c
+@@ -79,7 +79,7 @@ panel_manager_request_widget (struct panel_manager *self, struct wl_output *outp
+             "anchor", ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
+             | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
+             | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT,
+-            "layer", ZWLR_LAYER_SHELL_V1_LAYER_TOP,
++            "layer", ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
+             "kbd-interactivity", FALSE,
+             "exclusive-zone", height,
+             "namespace", "osk",
+diff --git i/src/vkeyboard.rs w/src/vkeyboard.rs
+index 886ce94..c208ad8 100644
+--- i/src/vkeyboard.rs
++++ w/src/vkeyboard.rs
+@@ -39,14 +39,14 @@ pub mod c {
+     impl Drop for KeyMap {
+         fn drop(&mut self) {
+             unsafe {
+-                close(self.fd as u32);
++                close(self.fd as i32);
+             }
+         }
+     }
+ 
+     extern "C" {
+         // From libc, to let KeyMap get deallocated.
+-        fn close(fd: u32);
++        fn close(fd: i32) -> i32;
+ 
+         pub fn eek_virtual_keyboard_v1_key(
+             virtual_keyboard: ZwpVirtualKeyboardV1,
