@@ -132,7 +132,7 @@ grep -q 'disable_watchdog_warning' ~/.config/hypr/input.lua ||
 SQ="$(dirname "$0")/squeekboard"
 pacman -S --noconfirm --needed squeekboard
 install -m755 "$SQ"/squeekboard "$SQ"/squeekboard-toggle "$SQ"/squeekboard-theme /usr/local/bin/
-for f in fr_wide fr terminal/fr_wide terminal/fr; do
+for f in fr_wide fr terminal/fr_wide terminal/fr url/fr_wide url/fr email/fr_wide email/fr; do
   install -Dm644 "$SQ"/fr_wide.yaml ~/.local/share/squeekboard/keyboards/$f.yaml
 done
 mkdir -p ~/.config/omarchy/plugins/andromarchy.squeekboard ~/.config/omarchy/hooks/theme-set.d
