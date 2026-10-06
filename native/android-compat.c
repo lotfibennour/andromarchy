@@ -983,6 +983,71 @@ static int copy_excl(int olddirfd, const char *old, int newdirfd, const char *ne
     return 0;
 }
 
+// The guest path of dirfd/name (AT_FDCWD or a directory fd, as ostree passes them).
+static int at_path(int dirfd, const char *name, char *out, size_t n)
+{
+    if (name[0] == '/' || dirfd == AT_FDCWD) {
+        if (name[0] == '/')
+            snprintf(out, n, "%s", name);
+        else if (!getcwd(out, n) || strlen(out) + strlen(name) + 2 > n)
+            return -1;
+        else
+            strcat(strcat(out, "/"), name);
+        return 0;
+    }
+    char fdp[32], dir[4096];
+    snprintf(fdp, sizeof fdp, "/proc/self/fd/%d", dirfd);
+    ssize_t len = readlink(fdp, dir, sizeof dir - 1); // through fakechroot: the guest path
+    if (len <= 0)
+        return -1;
+    dir[len] = 0;
+    // /proc can answer with the real host path (/data/data/<pkg>/... or /data/user/0/<pkg>/...): the guest form
+    const char *base = getenv("FAKECHROOT_BASE");
+    const char *d = dir;
+    if (base) {
+        const char *pkg = strstr(base, "/files/"); // .../<pkg>/files/rootfs: compare from the package on
+        const char *dpkg = pkg ? strstr(dir, pkg) : NULL;
+        if (dpkg && (strncmp(dir, "/data/data/", 11) == 0 || strncmp(dir, "/data/user/0/", 13) == 0) &&
+            strncmp(dpkg, pkg, strlen(pkg)) == 0)
+            d = dpkg + strlen(pkg);
+    }
+    return snprintf(out, n, "%s/%s", d, name) < (int)n ? 0 : -1;
+}
+
+// Flatpak installs (ostree checkouts) hard-link every file of an app or runtime to its object in the repo. Android
+// forbids hard links and the copy doubled Flatpak's disk use (11 GB for a few apps): a link to an object of a
+// bare-user-only repo (a plain file with the content and mode) is instead a RELATIVE symlink to it, which resolves
+// both in the main rootfs and in the sandboxes (they reach deployments by their real paths).
+static int ostree_object_link(int olddirfd, const char *old, int newdirfd, const char *new)
+{
+    char o[4096], nw[4096];
+    // ostree passes the objects directory's fd and "xx/<checksum>.file": check the resolved path
+    if (!strstr(old, ".file") || at_path(olddirfd, old, o, sizeof o) || at_path(newdirfd, new, nw, sizeof nw))
+        return -1;
+    const char *repo = strstr(o, "/repo/objects/");
+    // only the content (files/: nearly all the volume); Flatpak opens metadata and export/ with O_NOFOLLOW
+    if (!repo || !strstr(o, "/flatpak/") || !strstr(nw, "/files/"))
+        return -1;
+    // relative path from the new link's directory to the object: up from their common prefix
+    size_t common = 0;
+    for (size_t i = 0; o[i] && o[i] == nw[i]; i++)
+        if (o[i] == '/')
+            common = i + 1;
+    char rel[4096] = "";
+    for (const char *p = nw + common; (p = strchr(p, '/')); p++)
+        if (strlen(rel) + 3 < sizeof rel)
+            strcat(rel, "../");
+    if (strlen(rel) + strlen(o + common) >= sizeof rel)
+        return -1;
+    strcat(rel, o + common);
+    // past our own symlinkat: its deployment rule reads targets as container paths ("files/" is "/" there), which
+    // clamped the "../" at the container root (-> /repo/objects/...)
+    static int (*next_symlinkat)(const char *, int, const char *);
+    if (!next_symlinkat)
+        next_symlinkat = dlsym(RTLD_NEXT, "symlinkat");
+    return next_symlinkat(rel, newdirfd, new);
+}
+
 int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int flags)
 {
     static int (*next)(int, const char *, int, const char *, int);
@@ -992,6 +1057,8 @@ int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int fla
     if (tmpfile_link(olddirfd, old, newdirfd, new, flags, &r))
         return r;
     r = next(olddirfd, old, newdirfd, new, flags);
+    if (r < 0 && (errno == EACCES || errno == EPERM) && ostree_object_link(olddirfd, old, newdirfd, new) == 0)
+        return 0;
     if (r < 0 && (errno == EACCES || errno == EPERM)) {
         r = copy_excl(olddirfd, old, newdirfd, new);
         static int slot;

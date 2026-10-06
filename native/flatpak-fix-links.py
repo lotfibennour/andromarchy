@@ -39,6 +39,8 @@ for files, prefix in targets:
                         g = os.path.normpath(os.path.join(d, t))
                         if g == files or g.startswith(files + "/"):
                             continue  # a genuine link within the deployment
+                        if "/repo/objects/" in g:
+                            continue  # android-compat's stand-in for a hard link to the repo's object: intended
                         parts = t.split("/")
                         while parts and parts[0] == "..":
                             parts.pop(0)
