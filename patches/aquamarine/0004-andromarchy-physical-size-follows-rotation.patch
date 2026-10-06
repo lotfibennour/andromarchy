@@ -1,0 +1,33 @@
+diff --git a/src/backend/Andromarchy.cpp b/src/backend/Andromarchy.cpp
+--- a/src/backend/Andromarchy.cpp
++++ b/src/backend/Andromarchy.cpp
+@@ -547,6 +547,7 @@
+     // after a rotation the output mode follows, and the compositor reconfigures (events.state, like the Wayland backend).
+     if (output && size != oldSize) {
+         fprintf(stderr, "andromarchy: screen is now %.0fx%.0f\n", size.x, size.y);
++        orientPhysicalSize(output.get(), size);
+         output->modes.clear();
+         output->modes.emplace_back(SP<SOutputMode>(new SOutputMode(size, (unsigned int)refreshmHz, true)));
+         output->events.state.emit(IOutput::SStateEvent{.size = size});
+@@ -630,12 +631,21 @@
+     return {};
+ }
+ 
++// The physical size (mm, from Android) follows the screen orientation: clients size themselves from it
++// (Squeekboard in portrait drew flattened keys with the landscape width).
++static void orientPhysicalSize(Aquamarine::IOutput* out, const Hyprutils::Math::Vector2D& px) {
++    auto& mm = out->physicalSize;
++    if (mm.x > 0 && mm.y > 0 && (px.x < px.y) != (mm.x < mm.y))
++        mm = {mm.y, mm.x};
++}
++
+ bool Aquamarine::CAndromarchyBackend::createOutput(const std::string& name) {
+     if (output)
+         return false; // one Android screen
+ 
+     output = SP<CAndromarchyOutput>(new CAndromarchyOutput(name.empty() ? "ANDROMARCHY-1" : name, self));
+     output->self = output;
++    orientPhysicalSize(output.get(), size);
+     output->modes.emplace_back(SP<SOutputMode>(new SOutputMode(size, (unsigned int)refreshmHz, true)));
+     output->swapchain = CSwapchain::create(allocator, self.lock());
+     backend->events.newOutput.emit(SP<IOutput>(output));
