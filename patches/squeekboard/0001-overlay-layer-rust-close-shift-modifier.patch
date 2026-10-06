@@ -1,3 +1,23 @@
+diff --git i/src/layout.rs w/src/layout.rs
+index 75a5c94..98b8790 100644
+--- i/src/layout.rs
++++ w/src/layout.rs
+@@ -1246,6 +1246,15 @@ mod seat {
+         
+         // Apply state changes
+         layout.apply_view_transition(&action);
++        // Andromarchy: the "upper" view (Shift, Caps) also holds the Shift modifier, so shortcuts like
++        // Super+Shift+F or Ctrl+Shift+C reach the compositor and apps (letters are uppercase keysyms either way).
++        let upper = layout.state.current_view == "upper";
++        if upper != submission.is_modifier_active(crate::action::Modifier::Shift) {
++            match upper {
++                true => submission.handle_add_modifier(button_pos.into(), crate::action::Modifier::Shift, time),
++                false => submission.handle_drop_modifier(button_pos.into(), crate::action::Modifier::Shift, time),
++            }
++        }
+         
+         if let Presence::Missing = layout.state.active_buttons.remove(&button_pos) {
+             log_print!(
 diff --git i/src/panel.c w/src/panel.c
 index a9942c8..18f02d8 100644
 --- i/src/panel.c
