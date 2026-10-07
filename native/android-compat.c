@@ -938,6 +938,28 @@ FSTATAT_WRAP(fstatat64, struct stat64)
 FSTAT_WRAP(fstat, struct stat)
 FSTAT_WRAP(fstat64, struct stat64)
 
+// statx's mount id arrived in Linux 5.8: older Android kernels (5.4) leave STATX_MNT_ID out of the mask, and ostree
+// (Flatpak) fails "statx didn't return all required fields". It only compares ids to tell filesystems apart: the
+// device number does that (libglnx calls it through syscall(): the same fix there).
+static void statx_mnt_id(unsigned int mask, struct statx *st)
+{
+    if ((mask & STATX_MNT_ID) && !(st->stx_mask & STATX_MNT_ID)) {
+        st->stx_mnt_id = ((unsigned long long)st->stx_dev_major << 32) | st->stx_dev_minor;
+        st->stx_mask |= STATX_MNT_ID;
+    }
+}
+
+int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st)
+{
+    static int (*next)(int, const char *, int, unsigned int, struct statx *);
+    if (!next)
+        next = dlsym(RTLD_NEXT, "statx");
+    int r = next(dirfd, path, flags, mask, st);
+    if (r == 0)
+        statx_mnt_id(mask, st);
+    return r;
+}
+
 int access(const char *path, int mode)
 {
     static int (*next)(const char *, int);
@@ -1206,6 +1228,8 @@ long syscall(long nr, ...)
     if (!next)
         next = dlsym(RTLD_NEXT, "syscall");
     long r = next(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+    if (nr == SYS_statx && r == 0)
+        statx_mnt_id((unsigned int)a[3], (struct statx *)a[4]);
     // Raw readlinkat("/proc/self/exe") (Electron's utility processes): the loader otherwise, so VS Code's helpers
     // looked for icudtl.dat next to ld.so and died. Same answer as the readlink() wrapper.
     if (nr == SYS_readlinkat && IS_PROC((const char *)a[1]))
