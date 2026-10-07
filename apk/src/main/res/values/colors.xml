@@ -8,4 +8,5 @@
     <color name="settings_divider">#E0E0E0</color>
     <color name="settings_success">#2E7D32</color>
     <color name="settings_error">#C62828</color>
+    <color name="ic_launcher_background">#1A1B26</color>
 </resources>
