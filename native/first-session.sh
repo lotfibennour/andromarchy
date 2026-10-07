@@ -15,6 +15,10 @@ gsettings set org.gnome.desktop.interface icon-theme "Yaru-blue"
 gsettings set org.gnome.desktop.interface gtk-enable-primary-paste true
 # App store (GNOME Software): Flathub for this user (no system helper here; per-user installs, bwrap-flatpak.py runs them).
 flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+# On a new install, GNOME Software's first install failed until the CLI had made these (the repo's temp dir, the
+# exports): there from the start.
+mkdir -p ~/.local/share/flatpak/repo/tmp ~/.local/share/flatpak/exports/share/applications \
+  ~/.local/share/flatpak/exports/share/icons ~/.local/share/flatpak/exports/bin
 # Flathub's graphics drivers stay out (~1.8 GB): apps run on our Mesa (bwrap-flatpak.py's host_gl).
 flatpak --user mask 'org.freedesktop.Platform.GL.*'
 flatpak --user mask 'org.freedesktop.Platform.GL32.*'
