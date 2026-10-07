@@ -4,12 +4,6 @@
 # A physical keyboard (the app writes 1/0 to $XDG_RUNTIME_DIR/hardware-keyboard) turns the automatic display off:
 # Squeekboard hides and stops popping up in text fields; the bar icon still shows it on demand.
 # The keyboard's languages are Omarchy's (Hyprland's kb_layout, chosen on the first-launch screen), same order.
-# Phones (screen under 10 cm on its short side): in portrait, Squeekboard's own mobile layouts (10 big keys a row);
-# the PC layouts (installed under both names, install-omarchy-android.sh) stay for landscape.
-mm=${ANDROMARCHY_PHYSICAL_MM:-0x0}; w=${mm%x*}; h=${mm#*x}
-if [ "$(( w < h ? w : h ))" -gt 0 ] && [ "$(( w < h ? w : h ))" -lt 100 ]; then
-  find ~/.local/share/squeekboard/keyboards -name '*.yaml' ! -name '*_wide.yaml' -delete 2>/dev/null
-fi
 layouts=$(hyprctl getoption input:kb_layout 2>/dev/null | sed -n 's/^str: //p')
 sources=$(printf '%s\n' "${layouts:-us}" | tr ',' '\n' | sed -n "s/^ *\([a-z]*\).*/('xkb', '\1')/p" | paste -sd, -)
 gsettings set org.gnome.desktop.input-sources sources "[${sources//,(/, (}]"
