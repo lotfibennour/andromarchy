@@ -1028,6 +1028,10 @@ static int ostree_object_link(int olddirfd, const char *old, int newdirfd, const
     // only the content (files/: nearly all the volume); Flatpak opens metadata and export/ with O_NOFOLLOW
     if (!repo || !strstr(o, "/flatpak/") || !strstr(nw, "/files/"))
         return -1;
+    // configuration (etc/: small): fontconfig resolves fonts.conf's link itself, and inside the container the relative
+    // path climbs past its root ("Cannot load default config file: /repo/objects/...")
+    if (strstr(nw, "/files/etc/"))
+        return -1;
     // Only data (translations, icons, themes...): programs, libraries and scripts locate themselves from their own
     // path ($ORIGIN, readlink -f "$0"), which through a link is the repo's objects directory (Zotero's launcher,
     // gnome-calculator's libraries). Executable or ELF: a copy, as before.
@@ -1869,6 +1873,14 @@ static char *excluded_realpath(const char *path, char *resolved)
 char *realpath(const char *path, char *resolved)
 {
     static char *(*next)(const char *, char *);
+    // The program itself (.NET single-file apps read their bundle from realpath("/proc/self/exe")): the kernel's link
+    // is the loader; our readlink answers the program
+    char self[4096];
+    ssize_t n;
+    if (path && strcmp(path, "/proc/self/exe") == 0 && (n = readlink(path, self, sizeof self - 1)) > 0) {
+        self[n] = 0;
+        path = self;
+    }
     char *r = excluded_realpath(path, resolved);
     if (r != (char *)-1)
         return r;
