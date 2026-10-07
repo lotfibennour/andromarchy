@@ -38,7 +38,7 @@ pacman -S --noconfirm --needed --overwrite '/usr/lib/libfakeroot/fakechroot/*' \
   base-devel git cmake ninja pkgconf python autoconf automake libtool po4a \
   hyprland hyprwayland-scanner wayland-protocols glaze cli11 hwdata libdisplay-info libinput seatd pixman \
   fakechroot fakeroot kitty foot alacritty python-gobject jq brightnessctl gnome-keyring libsecret flatpak gnome-software nautilus squeekboard \
-  mesa-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc glm meson
+  mesa-utils libva-utils vulkan-tools vulkan-headers wayland-utils ttf-dejavu htop ncdu tree bc glm meson
 
 
 # fakeroot over TCP: Android has no SysV IPC.

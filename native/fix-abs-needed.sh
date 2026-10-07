@@ -38,7 +38,9 @@ fix() {
 # tens of milliseconds under the Android runtime.
 needs_fix() {
   grep -v '^$' | while read -r f; do [ -f "$f" ] && [ ! -L "$f" ] && printf '%s\n' "$f"; done |
-    xargs -r -d '\n' readelf -d /dev/null 2>/dev/null |
+    # -n: with its default batches, xargs stopped after ~1400 of 4600 files here, silently, and the rest was never
+    # fixed (a new image's quickshell could not load libproxy's backend: no desktop)
+    xargs -r -d '\n' -n 200 readelf -d /dev/null 2>/dev/null |
     awk '/^File: / { f = substr($0, 7); next }
          /\(NEEDED\).*\[\// || /\((RUNPATH|RPATH)\).*(\[|:)\// { if (f != "" && !seen[f]++) print f }'
 }
