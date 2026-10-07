@@ -50,6 +50,9 @@ final class HardwareKeyboard implements InputManager.InputDeviceListener {
      * when its hardware has a part named "Mouse" (keyboards with a touchpad do not name theirs so).
      */
     private boolean mouseButtons(InputDevice kbd) {
+        // the mouse itself also reports an alphabetic keyboard (its buttons): a mouse, whatever else it says
+        if (kbd.getName().toLowerCase().contains("mouse") || kbd.supportsSource(InputDevice.SOURCE_MOUSE))
+            return true;
         for (int id : im.getInputDeviceIds()) {
             InputDevice o = im.getInputDevice(id);
             if (o != null && o.getId() != kbd.getId() && o.getVendorId() == kbd.getVendorId()
