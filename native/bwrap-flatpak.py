@@ -275,9 +275,37 @@ def raw_execve(path, argv, env):
     sys.stderr.write(f"bwrap: execve {path}: errno {ctypes.get_errno()}\n")
 
 
+def glibc_version(libc):
+    """The newest GLIBC_2.N symbol version a libc.so.6 defines, as N."""
+    import re
+    with open(libc, "rb") as f:
+        return max((int(m) for m in re.findall(rb"GLIBC_2\.(\d+)", f.read())), default=0)
+
+
+HOST_GLIBC = "/opt/lotfix/flatpak-host-glibc"
+GLIBC_LIBS = ("libm.so.6", "libmvec.so.1", "libpthread.so.0", "libdl.so.2", "librt.so.1", "libresolv.so.2",
+              "libutil.so.1", "libanl.so.1", "libc_malloc_debug.so.0", "libBrokenLocale.so.1", "libnss_files.so.2",
+              "libnss_dns.so.2", "libthread_db.so.1")
+
+
 def runtime_glibc(tree):
     """The runtime's ld.so + libc, patched for Android's syscall filter (cached per runtime: keyed by where the
-    tree's /usr points; fakechroot's realpath cannot follow the tree's relative links)."""
+    tree's /usr points; fakechroot's realpath cannot follow the tree's relative links). When Arch's glibc is newer,
+    Arch's (/opt/lotfix/arch-glibc, with its other libraries and gconv modules): our Mesa, built against it, needs
+    its symbol versions (GLIBC_2.43 against Flathub 25.08's 2.41: no GPU, Qt apps failed to start); glibc runs
+    programs built for older versions."""
+    if glibc_version(tree.here("/usr/lib/aarch64-linux-gnu/libc.so.6")) < glibc_version("/usr/lib/libc.so.6"):
+        stamp = HOST_GLIBC + "/.from-" + hashlib.sha1(open("/opt/lotfix/arch-glibc/libc.so.6", "rb").read()).hexdigest()[:16]
+        if not os.path.exists(stamp):
+            shutil.rmtree(HOST_GLIBC, ignore_errors=True)
+            os.makedirs(HOST_GLIBC)
+            for n in ("ld-linux-aarch64.so.1", "libc.so.6"):
+                shutil.copy2("/opt/lotfix/arch-glibc/" + n, HOST_GLIBC)
+            for n in GLIBC_LIBS:
+                if os.path.exists("/usr/lib/" + n):
+                    shutil.copy2("/usr/lib/" + n, HOST_GLIBC)
+            open(stamp, "w").close()
+        return HOST_GLIBC
     key = tree.usr_source or tree.here("/usr")  # the runtime's own path: stable across launches
     # + the patcher itself: a new blocked syscall (clone3 for Android 13) re-patches the cached copies
     with open("/opt/lotfix/patch-glibc-syscalls.py", "rb") as f:
@@ -395,6 +423,15 @@ def main():
                 src = fd_path(int(v[0])) if o.endswith("-fd") else v[0]
                 if o.endswith("-try") and not os.path.lexists(src):
                     continue
+                # Flatpak's per-app Wayland socket (security context): on some devices (Android 13) Hyprland never
+                # answered on it and apps hung at their first request. No isolation here anyway: the main socket.
+                # (Flatpak starts us with an empty environment: the run dir from the socket's path, <run>/.flatpak/wl/)
+                if "/.flatpak/wl/wayland-" in src:
+                    run = src.split("/.flatpak/wl/")[0]
+                    main = min((os.path.join(run, n) for n in os.listdir(run)
+                                if n.startswith("wayland-") and not n.endswith(".lock")), default=None)
+                    if main:
+                        src = main
                 tree.bind(src, v[1])
             elif o in ("--proc", "--dev"):
                 tree.directory(v[0], None)
@@ -464,6 +501,14 @@ def main():
         first = [real(glibc)] + ([real(HOST_GL)] if gl else [])
         # last: our own /usr/lib, only for what our Mesa needs and the runtime lacks (its LLVM, ...)
         last = [ROOTFS + "/usr/lib"] if gl else []
+        # + the runtime's library subfolders, last: an absolute RPATH (libpulse -> /usr/lib/<triplet>/pulseaudio) is
+        # opened by the loader on Android's filesystem, which fakechroot cannot redirect
+        for base in ("/usr/lib/aarch64-linux-gnu", "/app/lib"):
+            try:
+                libdirs += [base + "/" + n for n in sorted(os.listdir(tree.here(base)))
+                            if os.path.isdir(tree.here(base + "/" + n))]
+            except OSError:
+                pass
         libpath = ":".join(first + [T + p for p in dict.fromkeys(libdirs)] + last)
         if gl:
             env.update(host_gl())
@@ -487,7 +532,9 @@ def main():
             # starts with it, and realpath/exec through them then reach real, existing files
             "FAKECHROOT_EXCLUDE_PATH": ":".join(tree.excluded + ["/data"]),
             "LD_LIBRARY_PATH": libpath, "LD_PRELOAD": f"{compat}:{fc}",
-            "GCONV_PATH": T + "/usr/lib/aarch64-linux-gnu/gconv", "TZDIR": T + "/usr/share/zoneinfo",
+            # gconv modules belong to their glibc: Arch's with Arch's glibc
+            "GCONV_PATH": real("/usr/lib/gconv") if glibc == HOST_GLIBC else T + "/usr/lib/aarch64-linux-gnu/gconv",
+            "TZDIR": T + "/usr/share/zoneinfo",
         })
         for k in ("FAKECHROOT_VERSION",):
             if k in os.environ:
