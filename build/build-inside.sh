@@ -47,16 +47,6 @@ rm -rf /tmp/fr && mkdir -p /tmp/fr && tar -xzf $L/fakeroot.tar.gz -C /tmp/fr --s
 for p in $L/patches/fakeroot/*.patch; do patch -d /tmp/fr -p1 < "$p"; done
 (cd /tmp/fr && ./configure --prefix=/usr/local --with-ipc=tcp && make -j"$(nproc)" && make install)
 
-# fakechroot: Arch's package rebuilt with our patch (a dirfd's directory without fchdir: threads resolved paths against
-# each other's, Flatpak runtime installs failed). Arch's recipe and patches; git apply (patch -i stopped after the first
-# file here). Only the library replaced (a rename: this build runs on it); andromarchy-protect keeps it across updates.
-rm -rf /tmp/fc && git clone -q --depth 1 https://gitlab.archlinux.org/archlinux/packaging/packages/fakechroot.git /tmp/fc
-curl -fsSL https://github.com/dex4er/fakechroot/archive/2.20.1.tar.gz | tar -xz -C /tmp/fc
-(cd /tmp/fc/fakechroot-2.20.1 && for p in ../statx.patch ../fakechroot-{2,3,4,5}.patch $L/patches/fakechroot/*.patch; do git apply "$p"; done &&
-  autoreconf -fi && ./configure --prefix=/usr --sbindir=/usr/bin --libdir=/usr/lib/libfakeroot --sysconfdir=/etc && make -j"$(nproc)" &&
-  cp src/.libs/libfakechroot.so /usr/lib/libfakeroot/fakechroot/.libfakechroot.so.new &&
-  mv /usr/lib/libfakeroot/fakechroot/.libfakechroot.so.new /usr/lib/libfakeroot/fakechroot/libfakechroot.so)
-
 # aquamarine (Andromarchy backend) + Hyprland (our patches), compiled natively by build-hyprland.sh: over Arch's copies.
 tar -xf $L/lotfix-hyprland-aarch64.tar.zst -C /
 # Only now: ignored earlier, pacman could not resolve them as hyprland dependencies.
@@ -97,6 +87,17 @@ pacman -S --noconfirm --needed patchelf
 install -m 755 $L/native/fix-abs-needed.sh /opt/lotfix/
 install -Dm 644 $L/native/lotfix-abs-needed.hook /usr/share/libalpm/hooks/zz-lotfix-abs-needed.hook
 /opt/lotfix/fix-abs-needed.sh --all
+
+# (after fix-abs-needed: autoreconf runs perl, which could not load libperl.so before)
+# fakechroot: Arch's package rebuilt with our patch (a dirfd's directory without fchdir: threads resolved paths against
+# each other's, Flatpak runtime installs failed). Arch's recipe and patches; git apply (patch -i stopped after the first
+# file here). Only the library replaced (a rename: this build runs on it); andromarchy-protect keeps it across updates.
+rm -rf /tmp/fc && git clone -q --depth 1 https://gitlab.archlinux.org/archlinux/packaging/packages/fakechroot.git /tmp/fc
+curl -fsSL https://github.com/dex4er/fakechroot/archive/2.20.1.tar.gz | tar -xz -C /tmp/fc
+(cd /tmp/fc/fakechroot-2.20.1 && for p in ../statx.patch ../fakechroot-{2,3,4,5}.patch $L/patches/fakechroot/*.patch; do git apply "$p"; done &&
+  autoreconf -fi && ./configure --prefix=/usr --sbindir=/usr/bin --libdir=/usr/lib/libfakeroot --sysconfdir=/etc && make -j"$(nproc)" &&
+  cp src/.libs/libfakechroot.so /usr/lib/libfakeroot/fakechroot/.libfakechroot.so.new &&
+  mv /usr/lib/libfakeroot/fakechroot/.libfakechroot.so.new /usr/lib/libfakeroot/fakechroot/libfakechroot.so)
 # Omarchy's "Install" menus use sudo and yay. No real root on Android: sudo runs commands as fake root
 # (native/sudo-shim.sh); yay is the upstream static aarch64 release (Go: works through go-syscalls).
 install -m 755 $L/native/sudo-shim.sh /usr/local/bin/sudo
