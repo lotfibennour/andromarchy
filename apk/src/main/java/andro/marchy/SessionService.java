@@ -71,6 +71,7 @@ public class SessionService extends Service {
     public void onCreate() {
         super.onCreate();
         started = true;
+        HostGestures.apply(this); // HyperOS 3-finger gestures off again after a restart, if allowed
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Session", NotificationManager.IMPORTANCE_LOW));
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
