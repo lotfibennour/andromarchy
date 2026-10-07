@@ -1,0 +1,52 @@
+rel2absat: the directory of a dirfd from /proc/self/fd, not fchdir() there and back (thread-safe: ostree's
+parallel pull failed with "Storing file 'tmplink.XXXXXX': No such file or directory" installing Flatpak runtimes).
+
+--- a/src/rel2absat.c
++++ b/src/rel2absat.c
+@@ -38,7 +38,8 @@
+ 
+ LOCAL char * rel2absat(int dirfd, const char * name, char * resolved)
+ {
+-    int cwdfd = 0;
++    char fdpath[32];
++    ssize_t n;
+     char cwd[FAKECHROOT_PATH_MAX - 1];
+ 
+     debug("rel2absat(%d, \"%s\", &resolved)", dirfd, name);
+@@ -61,20 +62,14 @@
+         }
+         snprintf(resolved, FAKECHROOT_PATH_MAX, "%s/%s", cwd, name);
+     } else {
+-        if ((cwdfd = nextcall(open)(".", O_RDONLY|O_DIRECTORY)) == -1) {
++        /* not fchdir() there and back: it changes the whole process's directory, and threads resolving at the same
++           time read each other's (ostree's parallel pull stored objects in the wrong directory). readlink: the
++           wrapped one, which answers the path inside the fake root, as getcwd() did. */
++        snprintf(fdpath, sizeof fdpath, "/proc/self/fd/%d", dirfd);
++        if ((n = readlink(fdpath, cwd, sizeof cwd - 1)) <= 0) {
+             goto error;
+         }
+-
+-        if (fchdir(dirfd) == -1) {
+-            goto error;
+-        }
+-        if (! getcwd(cwd, FAKECHROOT_PATH_MAX - 1)) {
+-            goto error;
+-        }
+-        if (fchdir(cwdfd) == -1) {
+-            goto error;
+-        }
+-        (void)close(cwdfd);
++        cwd[n] = '\0';
+ 
+         snprintf(resolved, FAKECHROOT_PATH_MAX, "%s/%s", cwd, name);
+     }
+@@ -86,9 +81,6 @@
+     return resolved;
+ 
+ error:
+-    if (cwdfd) {
+-        (void)close(cwdfd);
+-    }
+     resolved = NULL;
+     debug("rel2absat(%d, \"%s\", NULL)", dirfd, name);
+     return resolved;

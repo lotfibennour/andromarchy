@@ -27,6 +27,8 @@ PATHS = [
     "/usr/lib/libtva_drm_shim_wayland.so",
     # Hyprland + aquamarine with our patches
     "/usr/bin/Hyprland", "/usr/bin/hyprctl", "/usr/bin/start-hyprland", "/usr/lib/libaquamarine.so.0.15.1",
+    # fakechroot with our patch (thread-safe *at() paths)
+    "/usr/lib/libfakeroot/fakechroot/libfakechroot.so",
 ]
 # ELF files whose dependencies are checked after each transaction
 CHECK_DEPS = ["/usr/lib/libgallium-26.3.0-devel.so", "/usr/lib/libEGL_mesa.so.0.0.0", "/usr/lib/libvulkan_freedreno.so",
