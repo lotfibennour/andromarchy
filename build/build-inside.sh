@@ -90,11 +90,11 @@ install -Dm 644 $L/native/lotfix-abs-needed.hook /usr/share/libalpm/hooks/zz-lot
 
 # (after fix-abs-needed: autoreconf runs perl, which could not load libperl.so before)
 # fakechroot: Arch's package rebuilt with our patch (a dirfd's directory without fchdir: threads resolved paths against
-# each other's, Flatpak runtime installs failed). Arch's recipe and patches; git apply (patch -i stopped after the first
-# file here). Only the library replaced (a rename: this build runs on it); andromarchy-protect keeps it across updates.
-rm -rf /tmp/fc && git clone -q --depth 1 https://gitlab.archlinux.org/archlinux/packaging/packages/fakechroot.git /tmp/fc
-curl -fsSL https://github.com/dex4er/fakechroot/archive/2.20.1.tar.gz | tar -xz -C /tmp/fc
-(cd /tmp/fc/fakechroot-2.20.1 && for p in ../statx.patch ../fakechroot-{2,3,4,5}.patch $L/patches/fakechroot/*.patch; do git apply "$p"; done &&
+# each other's, Flatpak runtime installs failed). Arch's recipe and patches (patches/fakechroot/arch, from Arch's
+# packaging repo, 2.20.1-5); git apply (patch -i stopped after the first file here). Only the library replaced (a
+# rename: this build runs on it); andromarchy-protect keeps it across updates.
+rm -rf /tmp/fc && mkdir -p /tmp/fc && curl -fsSL https://github.com/dex4er/fakechroot/archive/2.20.1.tar.gz | tar -xz -C /tmp/fc
+(cd /tmp/fc/fakechroot-2.20.1 && for p in $L/patches/fakechroot/arch/{statx,fakechroot-2,fakechroot-3,fakechroot-4,fakechroot-5}.patch $L/patches/fakechroot/*.patch; do git apply "$p"; done &&
   autoreconf -fi && ./configure --prefix=/usr --sbindir=/usr/bin --libdir=/usr/lib/libfakeroot --sysconfdir=/etc && make -j"$(nproc)" &&
   cp src/.libs/libfakechroot.so /usr/lib/libfakeroot/fakechroot/.libfakechroot.so.new &&
   mv /usr/lib/libfakeroot/fakechroot/.libfakechroot.so.new /usr/lib/libfakeroot/fakechroot/libfakechroot.so)
