@@ -27,6 +27,15 @@ Android keeps the Super (Windows) key of hardware keyboards for itself. To use O
 keyboard, turn on Andromarchy's accessibility service: **Settings → Accessibility → Andromarchy → On**. It only
 reads key presses while Andromarchy is in front.
 
+## Android 12 and 13: child processes
+
+Android 12 and 13 stop the programs an app starts after a while. Run this once from a computer with `adb` (Android 14
+and later: **Developer options → Disable child process restrictions**):
+
+```sh
+adb shell settings put global settings_enable_monitor_phantom_procs false
+```
+
 ## HyperOS / MIUI settings
 
 Some gestures are taken by the system before Andromarchy sees them. Change these so the desktop's 3-finger gestures

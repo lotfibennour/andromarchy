@@ -17,7 +17,10 @@ import sys
 
 # aarch64 syscall numbers Android's app filter rejects but glibc tolerates as ENOSYS.
 # Found one by one with strace (SIGSYS, si_code=SYS_SECCOMP); each has an ENOSYS fallback in glibc.
-BLOCKED = {"set_robust_list": 99, "rseq": 293, "faccessat2": 439, "setfsuid": 151, "setfsgid": 152, "fchmodat2": 452}
+# clone3: Android 13's filter rejects it while glibc creates a thread with every signal blocked, so the trap
+# signal cannot be delivered and the kernel kills the process (multithreaded programs died silently); glibc falls back
+# to clone.
+BLOCKED = {"set_robust_list": 99, "rseq": 293, "clone3": 435, "faccessat2": 439, "setfsuid": 151, "setfsgid": 152, "fchmodat2": 452}
 SVC0 = struct.pack("<I", 0xD4000001)
 MOVN_X0_ENOSYS = struct.pack("<I", 0x92800000 | (37 << 5))  # movn x0, #37  -> x0 = -38
 

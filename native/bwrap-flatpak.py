@@ -279,6 +279,9 @@ def runtime_glibc(tree):
     """The runtime's ld.so + libc, patched for Android's syscall filter (cached per runtime: keyed by where the
     tree's /usr points; fakechroot's realpath cannot follow the tree's relative links)."""
     key = tree.usr_source or tree.here("/usr")  # the runtime's own path: stable across launches
+    # + the patcher itself: a new blocked syscall (clone3 for Android 13) re-patches the cached copies
+    with open("/opt/lotfix/patch-glibc-syscalls.py", "rb") as f:
+        key += hashlib.sha1(f.read()).hexdigest()
     d = "/opt/lotfix/runtime-glibc/" + hashlib.sha1(key.encode()).hexdigest()[:16]
     if not os.path.exists(d + "/libc.so.6"):
         shutil.rmtree(d, ignore_errors=True)
