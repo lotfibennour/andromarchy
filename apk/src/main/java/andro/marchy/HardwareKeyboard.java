@@ -38,7 +38,22 @@ final class HardwareKeyboard implements InputManager.InputDeviceListener {
         for (int id : im.getInputDeviceIds()) {
             InputDevice d = im.getInputDevice(id);
             if (d != null && !d.isVirtual() && d.isExternal()
-                    && d.getKeyboardType() == InputDevice.KEYBOARD_TYPE_ALPHABETIC)
+                    && d.getKeyboardType() == InputDevice.KEYBOARD_TYPE_ALPHABETIC && !mouseButtons(d))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Many mice also present a keyboard for their extra buttons ("Jomaa BT2 Keyboard" next to "Jomaa BT2 Mouse",
+     * same vendor and product): Android calls it a full keyboard, and the on-screen one stayed hidden. Not a keyboard
+     * when its hardware has a part named "Mouse" (keyboards with a touchpad do not name theirs so).
+     */
+    private boolean mouseButtons(InputDevice kbd) {
+        for (int id : im.getInputDeviceIds()) {
+            InputDevice o = im.getInputDevice(id);
+            if (o != null && o.getId() != kbd.getId() && o.getVendorId() == kbd.getVendorId()
+                    && o.getProductId() == kbd.getProductId() && o.getName().toLowerCase().contains("mouse"))
                 return true;
         }
         return false;
