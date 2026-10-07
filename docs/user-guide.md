@@ -123,6 +123,8 @@ check. Add `-v` to see why a check fails.
 - **Flatpak apps are not isolated** from each other: Android gives apps no way to build the sandboxes Flatpak uses.
   They run with your user's access, like ordinary programs.
 - **YouTube in Brave** decodes video on the processor. Hardware decoding works in `mpv` and `ffmpeg`.
+- Old games that change the screen resolution (Allegro 4 and similar) are drawn full-screen but don't receive taps
+  yet: play them in windowed mode.
 - There is no real administrator account: `sudo` works for installing and configuring, but cannot change the tablet's
   own system.
 
