@@ -46,6 +46,16 @@ adb shell settings put system three_gesture_horizontal_rtl none
 adb shell settings put global multi_finger_slide 0
 ```
 
+HyperOS may restore them after a restart. To let Andromarchy turn app switching off again at every start, grant it
+this permission once:
+
+```sh
+adb shell pm grant andro.marchy android.permission.WRITE_SECURE_SETTINGS
+```
+
+HyperOS does not let apps change the split-screen setting: if 3-finger swipes stop working after a restart, run the
+first three commands again.
+
 To undo:
 
 ```sh
@@ -53,6 +63,7 @@ adb shell settings put system enable_three_gesture 1
 adb shell settings put system three_gesture_horizontal_ltr split_ltr
 adb shell settings put system three_gesture_horizontal_rtl split_rtl
 adb shell settings put global multi_finger_slide 1
+adb shell pm revoke andro.marchy android.permission.WRITE_SECURE_SETTINGS
 ```
 
 Swipes from the screen edges (home, back, notifications) stay with Android.
