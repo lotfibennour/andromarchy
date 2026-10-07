@@ -1,0 +1,30 @@
+From: Lotfix
+Subject: [PATCH] render: X11 windows honor their viewport source (XWayland video-mode emulation)
+
+Old games switch video mode (XF86VidMode/RandR); XWayland emulates it with a viewport that crops the
+buffer to the emulated mode and stretches it over the screen. X11 windows skipped the viewport source,
+so the game stayed unscaled in a corner of a black full-screen window.
+---
+diff --git a/src/render/ElementRenderer.cpp b/src/render/ElementRenderer.cpp
+index 50b5a79..e0497ff 100644
+--- a/src/render/ElementRenderer.cpp
++++ b/src/render/ElementRenderer.cpp
+@@ -147,6 +147,18 @@ void IElementRenderer::calculateUVForSurface(PHLWINDOW pWindow, SP<CWLSurfaceRes
+             m_renderData.primarySurfaceUVTopLeft     = Vector2D(-1, -1);
+             m_renderData.primarySurfaceUVBottomRight = Vector2D(-1, -1);
+         }
++    } else if (pSurface->m_current.viewport.hasSource && pSurface->m_current.bufferSize.x > 0 && pSurface->m_current.bufferSize.y > 0) {
++        // XWayland crops with a viewport to emulate a game's video mode (XF86VidMode/RandR: Allegro, SDL...): the
++        // source is the emulated mode, stretched over the window. Without this, the whole buffer was drawn: the game
++        // sat unscaled in a corner of a screen-sized black window.
++        const auto& bufferSize = pSurface->m_current.bufferSize;
++        const auto& source     = pSurface->m_current.viewport.source;
++        m_renderData.primarySurfaceUVTopLeft     = Vector2D(source.x / bufferSize.x, source.y / bufferSize.y);
++        m_renderData.primarySurfaceUVBottomRight = Vector2D((source.x + source.width) / bufferSize.x, (source.y + source.height) / bufferSize.y);
++        if (m_renderData.primarySurfaceUVTopLeft == Vector2D() && m_renderData.primarySurfaceUVBottomRight == Vector2D(1, 1)) {
++            m_renderData.primarySurfaceUVTopLeft     = Vector2D(-1, -1);
++            m_renderData.primarySurfaceUVBottomRight = Vector2D(-1, -1);
++        }
+     } else {
+         m_renderData.primarySurfaceUVTopLeft     = Vector2D(-1, -1);
+         m_renderData.primarySurfaceUVBottomRight = Vector2D(-1, -1);
