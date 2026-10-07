@@ -113,10 +113,10 @@ install -m755 "$SQ"/squeekboard "$SQ"/squeekboard-toggle "$SQ"/squeekboard-theme
 K=~/.local/share/squeekboard/keyboards
 for l in fr us ara; do
   for d in "" terminal/ url/ email/; do
-    install -Dm644 "$SQ"/${l}_wide.yaml $K/$d${l}_wide.yaml && install -Dm644 "$SQ"/${l}_wide.yaml $K/$d$l.yaml
+    install -Dm644 "$SQ"/${l}_wide.yaml $K/$d${l}_wide.yaml && install -Dm644 "$SQ"/$l.yaml $K/$d$l.yaml
   done
 done
-for f in number/us_wide number/us pin/us_wide pin/us; do install -Dm644 "$SQ"/us_wide.yaml $K/$f.yaml; done
+for f in number/us pin/us; do install -Dm644 "$SQ"/us_wide.yaml $K/${f}_wide.yaml; install -Dm644 "$SQ"/us.yaml $K/$f.yaml; done
 mkdir -p ~/.config/omarchy/plugins/andromarchy.squeekboard ~/.config/omarchy/hooks/theme-set.d
 cp "$SQ"/plugin/* ~/.config/omarchy/plugins/andromarchy.squeekboard/
 printf '#!/bin/bash\n# Squeekboard follows the Omarchy theme\nsqueekboard-theme\n' > ~/.config/omarchy/hooks/theme-set.d/squeekboard
