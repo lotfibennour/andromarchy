@@ -3,7 +3,10 @@
 # Omarchy theme colours, then the keyboard itself.
 # A physical keyboard (the app writes 1/0 to $XDG_RUNTIME_DIR/hardware-keyboard) turns the automatic display off:
 # Squeekboard hides and stops popping up in text fields; the bar icon still shows it on demand.
-gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'fr'), ('xkb', 'us'), ('xkb', 'ara')]"
+# The keyboard's languages are Omarchy's (Hyprland's kb_layout, chosen on the first-launch screen), same order.
+layouts=$(hyprctl getoption input:kb_layout 2>/dev/null | sed -n 's/^str: //p')
+sources=$(printf '%s\n' "${layouts:-us}" | tr ',' '\n' | sed -n "s/^ *\([a-z]*\).*/('xkb', '\1')/p" | paste -sd, -)
+gsettings set org.gnome.desktop.input-sources sources "[${sources//,(/, (}]"
 squeekboard-theme
 follow_hardware_keyboard() {
   f=$XDG_RUNTIME_DIR/hardware-keyboard

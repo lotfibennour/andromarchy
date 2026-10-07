@@ -76,7 +76,8 @@ The keyboard (Squeekboard) appears by itself when you tap a text field, and hide
 connected. The **⌨** icon in the bar shows or hides it at any time.
 
 - It has a full PC layout: Esc, Tab, Ctrl, Super, Alt, AltGr, arrows, and F1–F12 on AltGr.
-- **🌐** switches language: French, English, Arabic.
+- **🌐** switches between the keyboard layouts you chose on the first-launch screen (Omarchy's). French,
+  English and Arabic have the PC layout.
 - Modifiers work like keyboard chords. Tap **Super**, then **Shift**, then **F** for Super + Shift + F; they turn off
   after the key. **Double-tap** a modifier to keep it on; tap it again to release it.
 - It takes the colours of the current Omarchy theme.
