@@ -6,6 +6,7 @@
 Andromarchy runs a full Arch Linux ARM desktop on an Android tablet. Linux programs run directly on the device, with
 its GPU (Mesa Turnip/Freedreno on KGSL), sound, cameras, touch screen and on-screen keyboard. You get Omarchy's
 desktop with its apps, the Flatpak store, Brave, VS Code, and anything else from Arch Linux ARM.
+
 <img width="800" height="450" alt="andromarchy_demo" src="https://github.com/user-attachments/assets/61e4b65d-52a7-4d93-b21b-31fb3c5ac1d8" />
 
 ## Requirements
