@@ -9,6 +9,8 @@ desktop with its apps, the Flatpak store, Brave, VS Code, and anything else from
 
 <img width="800" height="450" alt="andromarchy_demo" src="https://github.com/user-attachments/assets/61e4b65d-52a7-4d93-b21b-31fb3c5ac1d8" />
 
+Watch full Demo on Youtube: (https://youtu.be/V79Su8oHRUI)
+
 ## Requirements
 
 - Android 11 or later, with a **Qualcomm Adreno GPU** (Snapdragon).
