@@ -1170,10 +1170,21 @@ static int android_blocked(long nr)
     case SYS_faccessat2:
     case SYS_setfsuid:
     case SYS_setfsgid:
+    case SYS_open_tree: // see open_tree() below
         return 1;
     default:
         return 0;
     }
+}
+
+// open_tree: allowed by older Android filters (Android 13), where it reached the kernel with an untranslated path
+// (Flatpak, libglnx: "open_tree: No such file or directory"); newer ones block it. Unavailable everywhere: libglnx
+// then uses openat, through fakechroot.
+int open_tree(int dirfd, const char *path, unsigned int flags)
+{
+    (void)dirfd, (void)path, (void)flags;
+    errno = ENOSYS;
+    return -1;
 }
 
 // Raw path syscalls bypass fakechroot (libuv's statx: neovim found no "/root"). Give them the rootfs prefix like
