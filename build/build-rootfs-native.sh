@@ -34,7 +34,7 @@ inside_installed "set -euo pipefail
   curl -fsSL -z mesa.tar -o mesa.tar $MESA_URL
   curl -fsSL -z fakeroot.tar.gz -o fakeroot.tar.gz $FAKEROOT_URL
   # Hyprland + aquamarine with our patches (skipped when already built).
-  [ -f $G/out/lotfix-hyprland-aarch64.tar.zst ] || sudo bash $REPO/build/build-hyprland.sh $REPO/patches $G/out
+  [ -f $G/out/lotfix-hyprland-aarch64.tar.zst ] || bash $REPO/build/build-hyprland.sh $REPO/patches $G/out
   rm -rf $G/rootfs && mkdir -p $G/rootfs
   # Its absolute symlinks mean the new root (android-compat writes them relative to it). Read-only directory
   # modes last: as the app (no root), tar could not fill a 0555 directory it had just created.

@@ -12,7 +12,7 @@ OUT=${2:?out dir}
 W=/tmp/lotfix-hl
 S=$W/stage
 
-pacman -S --noconfirm --needed git cmake ninja gcc pkgconf hyprwayland-scanner wayland-protocols glaze cli11 \
+$(command -v sudo) pacman -S --noconfirm --needed git cmake ninja gcc pkgconf hyprwayland-scanner wayland-protocols glaze cli11 \
   hwdata libdisplay-info libinput seatd pixman zstd
 rm -rf "$W" && mkdir -p "$W" "$OUT"
 
