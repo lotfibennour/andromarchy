@@ -173,8 +173,10 @@ localedef --no-archive -i en_US -f UTF-8 /usr/lib/locale/en_US.UTF-8
 # only provide pacman's view of "mesa" (dependencies); their libraries are replaced by this build. A prebuilt Mesa
 # pinned an LLVM that Arch dropped (llvm-libs 23 removed libLLVM.so.22.1: the session did not start).
 pacman -S --noconfirm --needed llvm clang libclc spirv-llvm-translator glslang cbindgen python-mako python-yaml   python-packaging python-ply byacc bison flex libva wayland-protocols libxrandr libxshmfence libxxf86vm libglvnd
-rm -rf /tmp/mesa-src && git clone -q -b test/add-va-bridge https://github.com/lfdevs/mesa-for-android-container /tmp/mesa-src
-git -C /tmp/mesa-src checkout -q ef25369b9c
+# By commit: upstream deleted the test/add-va-bridge branch this commit came from.
+rm -rf /tmp/mesa-src && git init -q /tmp/mesa-src
+git -C /tmp/mesa-src fetch -q --depth=1 https://github.com/lfdevs/mesa-for-android-container ef25369b9cef72589e164010bea7af3745e92c7b
+git -C /tmp/mesa-src checkout -q FETCH_HEAD
 # The validated build's options, every one that differs from Mesa's defaults (termux-va: hardware video).
 (cd /tmp/mesa-src && meson setup build --prefix=/usr --buildtype=release -Dplatforms=x11,wayland \
   -Dgallium-drivers=freedreno,zink,virgl,llvmpipe -Dvulkan-drivers=freedreno -Dfreedreno-kmds=kgsl \
