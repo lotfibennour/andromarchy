@@ -22,8 +22,8 @@ android {
         // Gradle warning; Android installs and runs such apps.
         minSdk = 30
         targetSdk = 28
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.0.1"
         // The imported code also has a "compatible" transport (Binder bridge from a separate Termux); here the
         // daemon runs in this app, so the display connects to its socket directly.
         buildConfigField "boolean", "COMPATIBLE", "false"
@@ -55,9 +55,29 @@ android {
         }
     }
 
+    // The release key stays out of the repo: ANDROMARCHY_SIGNING names a properties file (storePath, storePassword,
+    // keyAlias, keyPassword). Without it, Android's default debug key. Debug builds use it too, to update in place.
+    def signingFile = System.getenv("ANDROMARCHY_SIGNING")
+    if (signingFile) {
+        def sp = new Properties()
+        file(signingFile).withInputStream { sp.load(it) }
+        signingConfigs {
+            andromarchy {
+                storeFile = file(sp.storePath)
+                storePassword = sp.storePassword
+                keyAlias = sp.keyAlias
+                keyPassword = sp.keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled = false
+            if (signingFile) signingConfig = signingConfigs.andromarchy
+        }
+        debug {
+            if (signingFile) signingConfig = signingConfigs.andromarchy
         }
     }
 
