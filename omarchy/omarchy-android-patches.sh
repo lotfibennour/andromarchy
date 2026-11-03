@@ -8,6 +8,9 @@ O=${OMARCHY_PATH:-/usr/share/omarchy}
 # A clone made on Windows has CRLF line endings, which break every omarchy-* script.
 grep -rlIZ $'\r' "$O" | xargs -0 -r sed -i 's/\r$//' || true
 
+# Our pinned Hyprland has no misc:bell_sound: Omarchy setting it put a config error bar on the desktop.
+sed -i '/^ *bell_sound = /d' "$O/default/hypr/looknfeel.lua"
+
 # ttfx comes from the x86-only Omarchy repo; without it the screensaver loops on "command not found"...
 grep -q 'command -v ttfx >/dev/null || exit_screensaver' "$O/bin/omarchy-screensaver" ||
   sed -i '/^trap exit_screensaver/a command -v ttfx >/dev/null || exit_screensaver' "$O/bin/omarchy-screensaver"
