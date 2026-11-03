@@ -111,7 +111,7 @@ connected. The **⌨** icon in the bar shows or hides it at any time.
 
 ## Installing apps
 
-- **App store**: GNOME Software, with Flathub. Flatpak apps run on the tablet's GPU.
+- **App store**: GNOME Software, with Flathub. Flatpak apps run on the tablet's GPU. If the store is empty, run this in a terminal: `flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo`
 - **Terminal**: `sudo pacman -S <package>` for Arch Linux packages, `yay -S <package>` for the AUR.
 - Andromarchy's own components (graphics drivers, compositor, keyboard) are protected: an install or a full update
   (`sudo pacman -Syu`, `omarchy-update`) cannot replace them. If an update needs attention, a notification says so.
