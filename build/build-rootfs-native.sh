@@ -63,7 +63,7 @@ echo "== 2/3 build-inside.sh (new rootfs, native)"
 
 echo "== 3/3 pack (installed rootfs)"
 inside_installed "set -euo pipefail
-  rm -rf $G/rootfs/tmp/lotfix $G/rootfs/var/cache/pacman/pkg/* $G/rootfs/etc/resolv.conf
+  rm -rf $G/rootfs/tmp/* $G/rootfs/var/cache/pacman/pkg/* $G/rootfs/etc/resolv.conf
   rm -f $G/rootfs/etc/machine-id && touch $G/rootfs/etc/machine-id # first-boot.sh makes this device's
   # Files no one may read (dbus-daemon-launch-helper is 4110): tar runs as the app, their real owner. Readable.
   find $G/rootfs -xdev ! -perm -u+r \\( -type f -o -type d \\) -exec chmod u+r {} +
